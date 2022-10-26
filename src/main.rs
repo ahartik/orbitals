@@ -51,13 +51,20 @@ const QUAD_VERTICES: [Vertex; 6] = [
 struct Uniforms {
     // Extra size for alignment
     camera_pos: [f32; 4],
-    // Same her
+    // Same here
     look_matrix: [[f32; 4]; 3],
+
+    quantum_nums:  [f32; 4],
+    // 
+    rfun_coeff: [f32; 4],
 }
 
 type Vec3f = na::Vector3<f32>;
 type Vec3d = na::Vector3<f64>;
-// type Mat3f = na::Matrix3<f32>;
+type Mat3f = na::Matrix3<f32>;
+
+type Vec4f = na::Vector4<f32>;
+type Mat4f = na::Matrix4<f32>;
 
 impl Uniforms {
     // fn new(pos: &Vec3f, look_at: &Vec3f, up: 
@@ -94,16 +101,44 @@ impl Uniforms {
         }
         return Uniforms {
             camera_pos: *pos.push(0.0).as_ref(),
-            look_matrix: look_mat_array
+            look_matrix: look_mat_array,
+            quantum_nums: [1.0, 0.0, 0.0, 0.0],
+            rfun_coeff: [1.0, 0.0, 0.0, 0.0],
         }
     }
+
 }
 
-struct UniformBuffer {
-    // uniforms: Uniforms,
+struct UniformBuffer{
+    buffer: wgpu::Buffer,
+    layout: wgpu::BindGroupLayout,
+    bind_group: wgpu::BindGroup,
 }
 
 impl UniformBuffer {
+
+    fn create(device: &wgpu::Device) -> Self {
+        let zero_uniforms = Uniforms::zeroed();
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[zero_uniforms]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let layout = device.create_bind_group_layout(&Self::layout());
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("my uniforms"),
+            layout: &layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+                    }],
+        });
+        return Self {
+            buffer, layout, bind_group
+        };
+    }
+
     fn layout<'a>() -> wgpu::BindGroupLayoutDescriptor<'a> {
         wgpu::BindGroupLayoutDescriptor {
             entries: &[
@@ -120,6 +155,12 @@ impl UniformBuffer {
             ],
             label: Some("uniform_bind_group"),
         }
+    }
+
+    fn queue_update(
+        &self, queue: &wgpu::Queue, uniforms: &Uniforms) { 
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(
+                std::array::from_ref(uniforms)));
     }
 
     /*
@@ -175,7 +216,7 @@ impl CameraController {
             } => {
                 if self.is_mouse_pressed {
                     println!("move {}, {}", dx, dy);
-                    self.phi += Self::SENS_X * dx;
+                    self.phi -= Self::SENS_X * dx;
                     self.phi %= 2.0 * Self::PI;
                     self.theta -= Self::SENS_Y * dy;
                     self.theta = self.theta.clamp(0.0, Self::PI);
@@ -201,6 +242,96 @@ impl CameraController {
             self.theta.sin() * self.phi.sin(),
             self.theta.cos()).cast::<f32>();
     }
+}
+
+#[derive(Clone, Debug)]
+struct Polynomial {
+    coeffs: Vec<f64>,
+}
+
+impl Polynomial {
+    fn from_coeffs(mut coeffs: Vec<f64>) -> Self {
+        while let Some(x) = coeffs.last() {
+            if *x == 0.0 {
+                coeffs.pop();
+            } else {
+                break;
+            }
+        }
+        if coeffs.is_empty() {
+            coeffs.push(0.0);
+        }
+        Self {
+            coeffs
+        }
+    }
+
+    fn mul(&self, o: &Polynomial) -> Self {
+        let mut coeffs = vec![];
+        coeffs.resize(1 + (self.coeffs.len()-1)+(o.coeffs.len()-1), 0.0);
+        for i in 0..self.coeffs.len() {
+            for j in 0..o.coeffs.len() {
+                coeffs[i+j] += self.coeffs[i] * o.coeffs[j];
+            }
+        }
+        return Self {
+            coeffs
+        };
+    }
+
+    fn scale_inplace(&mut self, a: f64) {
+        for i in 0..self.coeffs.len() {
+            self.coeffs[i] *= a;
+        }
+    }
+
+    fn diff_inplace(&mut self) {
+        for i in 1..self.coeffs.len() {
+            self.coeffs[i-1] = (i as f64) * self.coeffs[i];
+        }
+        self.coeffs.pop();
+        if self.coeffs.is_empty() {
+            self.coeffs.push(0.0);
+        }
+    }
+}
+
+
+fn gen_legendre(maxn: usize) -> Vec<Polynomial> {
+    // (x^2-1)^n
+    let mut base : Vec<Polynomial> = vec![];
+    let mut last = Polynomial::from_coeffs(vec![1.0]);
+    let x2 = Polynomial::from_coeffs(vec![-1.0, 0.0, 1.0]);
+
+    base.push(last.clone());
+
+    for _ in 1..(maxn+1) {
+        last = last.mul(&x2);
+        base.push(last.clone());
+    }
+
+    let mut res : Vec<Polynomial> = vec![];
+    res.push(Polynomial::from_coeffs(vec![1.0]));
+    for n in 1..(maxn+1) {
+        // P_n = (1/(2^n * n!))(d/dx)^n (x^2-1)^n
+        let mut p = base[n].clone(); // (x^2-1)^n
+        for k in 1..(n+1) {
+            p.diff_inplace();
+            p.scale_inplace(1.0 / (2.0 * (k as f64)));
+        }
+        res.push(p);
+    }
+    return res;
+}
+
+
+// 
+struct AppState {
+    camera: CameraController,
+    aspect_ratio: f32,
+    n: i32,
+    l: i32,
+    m: i32,
 }
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
@@ -250,30 +381,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
 
     // UNIFORM STUFF
-    let zero_uniforms = Uniforms::zeroed();
-
-    let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Uniform Buffer"),
-        contents: bytemuck::cast_slice(&[zero_uniforms]),
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
-
-    let uniform_layout = device.create_bind_group_layout(&UniformBuffer::layout());
-
-    let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("my uniforms"),
-        layout: &uniform_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-            binding: 0,
-            resource: uniform_buffer.as_entire_binding(),
-                }],
-    });
+    let uniform_buffer = UniformBuffer::create(&device);
 
     // PIPELINE STUFF
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("MyPipelineLayout"),
-        bind_group_layouts: &[&uniform_layout],
+        bind_group_layouts: &[&uniform_buffer.layout],
         push_constant_ranges: &[],
     });
 
@@ -357,7 +470,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
                 let uniforms = Uniforms::new(camera.camera_pos(), Vec3f::zeros(), aspect_ratio);
-                queue.write_buffer(&uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+                uniform_buffer.queue_update(&queue, &uniforms);
                 let mut encoder =
                     device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
                 {
@@ -375,7 +488,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     });
                     rpass.set_pipeline(&render_pipeline);
                     rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                    rpass.set_bind_group(0, &uniform_bind_group, &[]);
+                    rpass.set_bind_group(0, &uniform_buffer.bind_group, &[]);
                     rpass.draw(0..(QUAD_VERTICES.len() as u32), 0..1);
                 }
 
@@ -395,6 +508,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 fn main() {
     let event_loop = EventLoop::new();
     let window = winit::window::Window::new(&event_loop).unwrap();
+
+
+    let legendre = gen_legendre(5);
+    for x in legendre {
+        println!("{:?}", x);
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     {
         env_logger::init();

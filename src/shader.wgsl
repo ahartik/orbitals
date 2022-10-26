@@ -21,6 +21,8 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 struct Uniforms {
   camera_pos: vec3<f32>,
   look_matrix: mat3x3<f32>,
+  quantum_nums: vec3<f32>,
+  rfun_coeff: vec4<f32>,
 }
 
 @group(0)
@@ -53,7 +55,6 @@ fn hydrogen(pos: vec3<f32>) -> f32 {
   // R31
   var rfun = (8.0/(27.0*sqrt(6.0)))*(1.0-r/6.0)*r* exp(-r/3.0);
 
-
   var wave = yfun * rfun;
   return wave * wave;
 }
@@ -83,11 +84,15 @@ fn lighting(pos: vec3<f32>, normal: vec3<f32>, light_pos: vec3<f32>) -> vec4<f32
 fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
 
   var pos = uniforms.camera_pos;
-  var light_pos = vec3(normalize(vec2(pos.x, pos.y)) * 100.0 , 100.0);
+
+  // var light_pos = vec3(normalize(vec2(pos.x, pos.y)) * 100.0 , 100.0);
+  // var light_pos = vec3(0.0, -100.0, 100.0);
+  var light_pos =
+    pos + uniforms.look_matrix * vec3(0.0, 100.0, 0.0);
+
   var v = vec3(vertex.pos.x,   vertex.pos.y, 1.0);
   var ray = normalize(uniforms.look_matrix * v);
   // var ray = v;
-
 
   // let LIMIT = 0.0015;
   // let LIMIT = 0.0015;
