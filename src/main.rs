@@ -62,7 +62,8 @@ struct Uniforms {
     yfun_coeffs: [f32; 4],
     rand: u32,
     surf_limit: f32,
-    end_padding: [u32; 2],
+    max_phi: f32,
+    end_padding: [u32; 1],
 }
 
 type Vec3f = na::Vector3<f32>;
@@ -389,6 +390,7 @@ struct AppState {
     l: i32,
     m: i32,
     surf_limit: f64,
+    enable_cuts: bool,
     legendre: Vec<Polynomial>,
     laguerre: Vec<Polynomial>,
 }
@@ -399,9 +401,10 @@ impl AppState {
             camera: CameraController::new(),
             aspect_ratio: 1.0,
             n: 3,
-            l: 2,
+            l: 0,
             m: 0,
             surf_limit: 3.7e-05,
+            enable_cuts: false,
             legendre: gen_legendre(MAX_N as usize),
             laguerre: gen_laguerre((2 * MAX_N) as usize),
         }
@@ -475,8 +478,7 @@ impl AppState {
         for i in 0..yfun.coeffs.len() {
             yfun_coeffs[i] = yfun.coeffs[i] as f32;
         }
-
-        return Uniforms {
+return Uniforms {
             camera_pos: *self.camera.camera_pos().push(0.0).as_ref(),
             look_matrix: look_mat_array,
             quantum_nums: [self.n as f32, self.l as f32, self.m as f32, 0.0],
@@ -484,7 +486,14 @@ impl AppState {
             yfun_coeffs,
             rand: rand::random::<u32>(),
             surf_limit: self.surf_limit as f32,
-            end_padding: [0, 0],
+            max_phi: 
+                if self.enable_cuts {
+                    0.5 * std::f32::consts::PI
+                } else {
+                    2.0 * std::f32::consts::PI
+                }
+            ,
+            end_padding: [0],
         };
     }
 
@@ -523,6 +532,10 @@ impl AppState {
                         self.surf_limit *= 1.25;
                         changed = true;
                     },
+                    K::C => {
+                        self.enable_cuts = !self.enable_cuts;
+                        changed = true;
+                    },
                     _ => {}
                 }
             },
@@ -539,6 +552,7 @@ impl AppState {
                 self.m = 0;
             }
             println!("N={} L={} M={}", self.n, self.l, self.m);
+            println!("surf_limit={} enable_cuts={}", self.surf_limit, self.enable_cuts);
             return true;
         }
         return false;

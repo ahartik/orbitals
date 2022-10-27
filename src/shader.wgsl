@@ -28,7 +28,8 @@ struct Uniforms {
   // All non-vector stuff should be in the end:
   rand: u32,
   surf_limit: f32,
-  padding: vec2<f32>
+  max_phi: f32,
+  padding: f32
 }
 
 @group(0)
@@ -40,6 +41,7 @@ var<uniform> uniforms: Uniforms;
 
 let PI : f32 = 3.14159265;
 
+
 fn hydrogen(pos: vec3<f32>) -> f32 {
   var uni = uniforms;
   var rfun_coeffs = uni.rfun_coeffs;
@@ -47,11 +49,18 @@ fn hydrogen(pos: vec3<f32>) -> f32 {
   var l = uni.quantum_nums.y;
   var m = uni.quantum_nums.z;
 
+
   var r = length(pos);
   // let theta = atan2(r, pos.z);
   let costheta = pos.z / r;
   let sintheta = length(vec2(pos.x,pos.y)) / r;
   // let sintheta = sin(theta);
+
+  // TODO: Optimize out atan2
+  let phi = atan2(pos.y, pos.x);
+  if (phi > uniforms.max_phi) {
+    return 0.0;
+  }
 
 
   // Y00:
@@ -79,12 +88,58 @@ fn hydrogen(pos: vec3<f32>) -> f32 {
   return wave * wave;
 }
 
-fn normal(pos: vec3<f32>, cval: f32) -> vec3<f32> {
-  let H  = 0.05;
+fn normal(pos: vec3<f32>, dpos: vec3<f32>, cval: f32) -> vec3<f32> {
+  // Calculate in tangent space.
+  let H  = length(dpos); // 0.05;
+
+  var r = length(pos);
+  // let theta = atan2(r, pos.z);
+  let costheta = pos.z / r;
+  let xylen = length(vec2(pos.x, pos.y));
+  let sintheta = xylen / r;
+
+  // let phi = atan2(pos.y, pos.x);
+
+  let cosphi = pos.x / xylen;
+  let sinphi = pos.y / xylen;
+
+  let unit_r = normalize(pos) ;
+  let unit_phi = vec3(-sinphi, cosphi, 0.0);
+
+  let unit_theta =
+    -sintheta * vec3(0.0, 0.0, 1.0)
+    +
+    costheta * vec3(cosphi, sinphi, 0.0);
+
+  let ddr = (hydrogen( pos + H* unit_r)-cval) / H;
+  let ddtheta = (hydrogen( pos + H * unit_theta)-cval) / H;
+  // This is 0 if we're not doing cuts.
+  // let ddphi = (hydrogen( pos + H * unit_phi)-cval) / H;
+  // var ddphi = 0.0;
+
+  let last_phi = atan2(pos.y-dpos.y, pos.x-dpos.x);
+
+  if (last_phi > uniforms.max_phi) {
+    // Hit the plane.
+    if (dot(unit_phi, dpos) < 0.0) {
+      return unit_phi;
+    } else {
+      return -unit_phi;
+    }
+  }
+
+  // return unit_theta;
+   return -normalize(
+       unit_r * ddr +
+       unit_theta * ddtheta
+       );
+ 
+/*
   let ddx = (hydrogen( pos + vec3(H, 0.0, 0.0))-cval) / H;
   let ddy = (hydrogen( pos + vec3(0.0, H, 0.0))-cval) / H;
   let ddz = (hydrogen( pos + vec3(0.0, 0.0, H))-cval) / H;
   return -normalize(vec3(ddx, ddy, ddz));
+  */
 }
 
 fn lighting(pos: vec3<f32>, normal: vec3<f32>, light_pos: vec3<f32>) -> vec4<f32>{
@@ -152,7 +207,7 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
     if h > LIMIT {
       // dist /= MAX_DIST;
       // return vec4(dist, dist, dist, 1.0);
-       let n = normal(pos, h);
+       let n = normal(pos, dpos, h);
        // return vec4(vec3(0.5, 0.5, 0.5) + 0.5*n, 1.0);
        // return vec4(n, 1.0);
        return lighting(pos, n, light_pos);
