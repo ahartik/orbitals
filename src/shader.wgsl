@@ -24,6 +24,11 @@ struct Uniforms {
   quantum_nums: vec3<f32>,
   rfun_coeffs: vec4<f32>,
   yfun_coeffs: vec4<f32>,
+
+  // All non-vector stuff should be in the end:
+  rand: u32,
+  surf_limit: f32,
+  padding: vec2<f32>
 }
 
 @group(0)
@@ -35,7 +40,8 @@ var<uniform> uniforms: Uniforms;
 
 let PI : f32 = 3.14159265;
 
-fn hydrogen(uni: Uniforms, pos: vec3<f32>) -> f32 {
+fn hydrogen(pos: vec3<f32>) -> f32 {
+  var uni = uniforms;
   var rfun_coeffs = uni.rfun_coeffs;
   var n = uni.quantum_nums.x;
   var l = uni.quantum_nums.y;
@@ -73,11 +79,11 @@ fn hydrogen(uni: Uniforms, pos: vec3<f32>) -> f32 {
   return wave * wave;
 }
 
-fn normal(uni: Uniforms, pos: vec3<f32>, cval: f32) -> vec3<f32> {
+fn normal(pos: vec3<f32>, cval: f32) -> vec3<f32> {
   let H  = 0.05;
-  let ddx = (hydrogen(uni, pos + vec3(H, 0.0, 0.0))-cval) / H;
-  let ddy = (hydrogen(uni, pos + vec3(0.0, H, 0.0))-cval) / H;
-  let ddz = (hydrogen(uni, pos + vec3(0.0, 0.0, H))-cval) / H;
+  let ddx = (hydrogen( pos + vec3(H, 0.0, 0.0))-cval) / H;
+  let ddy = (hydrogen( pos + vec3(0.0, H, 0.0))-cval) / H;
+  let ddz = (hydrogen( pos + vec3(0.0, 0.0, H))-cval) / H;
   return -normalize(vec3(ddx, ddy, ddz));
 }
 
@@ -94,47 +100,78 @@ fn lighting(pos: vec3<f32>, normal: vec3<f32>, light_pos: vec3<f32>) -> vec4<f32
   return vec4(color, 1.0);
 }
 
-@fragment
-fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
+// var seed: u32 = 0;
 
+fn hash(s: u32) -> u32{
+  var seed = s;
+  seed ^= 2747636419u;
+  seed *= 2654435769u;
+  seed ^= seed >> 16u;
+  seed *= 2654435769u;
+  seed ^= seed >> 16u;
+  seed *= 2654435769u;
+  return seed;
+}
+
+fn get_rand(seed: u32) -> f32{
+  return f32(seed) / 4294967295.0;
+}
+
+@fragment
+fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
   var pos = uniforms.camera_pos;
 
   // var light_pos = vec3(normalize(vec2(pos.x, pos.y)) * 100.0 , 100.0);
   // var light_pos = vec3(0.0, -100.0, 100.0);
-  var light_pos =
-    pos + uniforms.look_matrix * vec3(0.0, 100.0, 0.0);
+  var light_pos = pos + uniforms.look_matrix * vec3(0.0, 100.0, 0.0);
 
-  var v = vec3(vertex.pos.x,   vertex.pos.y, 1.0);
+  var v = vec3(vertex.pos.x, vertex.pos.y, 1.0);
   var ray = normalize(uniforms.look_matrix * v);
   // var ray = v;
 
+  var seed : u32 = uniforms.rand +
+    u32((ray.x * ray.x) * 71337231.0 +
+                       vertex.position.y * 7171.0 + vertex.position.x);
+
   // let LIMIT = 0.0015;
   // let LIMIT = 0.0015;
-  
+
   // Matches 0.25/nm^3 from Griffiths page 153
-  let LIMIT = 3.7e-05;
+  // let LIMIT = 3.7e-05;
+  let LIMIT = uniforms.surf_limit;
 
   let N = 512;
   let MAX_DIST = 2.0 * length(pos);
   let DX = MAX_DIST / f32(N);
   let dpos = DX * ray;
   var dist = 0.0;
-  var m = -1.0;
-  for (var i: i32 = 0; i < N;  i++) {
-    let h = hydrogen(uniforms, pos);
+  var prob : f32 = 0.0;
+  for (var i : i32 = 0; i < N; i++) {
+    let h = hydrogen(pos);
+
     if h > LIMIT {
       // dist /= MAX_DIST;
       // return vec4(dist, dist, dist, 1.0);
-       let n = normal(uniforms, pos, h);
+       let n = normal(pos, h);
        // return vec4(vec3(0.5, 0.5, 0.5) + 0.5*n, 1.0);
        // return vec4(n, 1.0);
        return lighting(pos, n, light_pos);
     }
-    m = max(m, h);
+
+    prob += h * DX;
+    /*
+    seed = hash(seed);
+    if h * DX > 0.01 * get_rand(seed) {
+      return vec4(1000.0 * h, 1.0, 1.0, 1.0);
+    }
+    */
+
     pos += dpos;
     dist += DX;
   }
   // return vec4(vec3(0.5, 0.5, 0.5) - 0.5*ray, 1.0);
-  // return vec4(m, m, m, 1.0);
-  return vec4(0.5, 0.2, 0.7, 1.0);
+  // return vec4(0.5, 0.2, 0.7, 1.0);
+  prob *= 100.0;
+  return vec4(prob, prob, prob, 1.0);
+  // return vec4(0.0, 0.0, 0.0, 0.0);
 }

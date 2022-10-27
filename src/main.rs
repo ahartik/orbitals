@@ -46,6 +46,8 @@ const QUAD_VERTICES: [Vertex; 6] = [
     vertex(-1.0, -1.0),
 ];
 
+
+// This must have the same bit layout as the Uniforms struct in the shader.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 struct Uniforms {
@@ -58,6 +60,9 @@ struct Uniforms {
     //
     rfun_coeffs: [f32; 4],
     yfun_coeffs: [f32; 4],
+    rand: u32,
+    surf_limit: f32,
+    end_padding: [u32; 2],
 }
 
 type Vec3f = na::Vector3<f32>;
@@ -180,11 +185,21 @@ impl CameraController {
                 } else {
                     return false;
                 }
-            }
+            },
             DeviceEvent::Button { button, state } => {
                 // println!("button: {}", button);
                 self.is_mouse_pressed = *state == winit::event::ElementState::Pressed;
                 return false;
+            },
+            DeviceEvent::MouseWheel{
+                delta: winit::event::MouseScrollDelta::LineDelta(_x, y)
+            } => {
+                if *y > 0.0 {
+                    self.r *= 1.125;
+                } else {
+                    self.r /= 1.125;
+                }
+                return true;
             }
             _ => false,
         }
@@ -364,7 +379,7 @@ fn gen_laguerre(maxn: usize) -> Vec<Polynomial> {
 }
 
 // Largest supported value of N
-const MAX_N: i32 = 5;
+const MAX_N: i32 = 4;
 
 //
 struct AppState {
@@ -373,6 +388,7 @@ struct AppState {
     n: i32,
     l: i32,
     m: i32,
+    surf_limit: f64,
     legendre: Vec<Polynomial>,
     laguerre: Vec<Polynomial>,
 }
@@ -385,6 +401,7 @@ impl AppState {
             n: 3,
             l: 2,
             m: 0,
+            surf_limit: 3.7e-05,
             legendre: gen_legendre(MAX_N as usize),
             laguerre: gen_laguerre((2 * MAX_N) as usize),
         }
@@ -465,7 +482,66 @@ impl AppState {
             quantum_nums: [self.n as f32, self.l as f32, self.m as f32, 0.0],
             rfun_coeffs,
             yfun_coeffs,
+            rand: rand::random::<u32>(),
+            surf_limit: self.surf_limit as f32,
+            end_padding: [0, 0],
         };
+    }
+
+    fn process_event(&mut self, event: &DeviceEvent) -> bool {
+        if self.camera.process_mouse(event) {
+            return true;
+        }
+
+        let mut changed = false;
+        match event {
+            DeviceEvent::Key(
+                winit::event::KeyboardInput {
+                    virtual_keycode: Some(code),
+                    state: winit::event::ElementState::Pressed,
+                    ..
+                }) => {
+                type K = winit::event::VirtualKeyCode;
+                match code {
+                    K::N => {
+                        self.n += 1;
+                        changed = true;
+                    },
+                    K::L => {
+                        self.l += 1;
+                        changed = true;
+                    },
+                    K::M => {
+                        self.m += 1;
+                        changed = true;
+                    },
+                    K::Equals | K::Plus => {
+                        self.surf_limit /= 1.25;
+                        changed = true;
+                    },
+                    K::Minus => {
+                        self.surf_limit *= 1.25;
+                        changed = true;
+                    },
+                    _ => {}
+                }
+            },
+            _ => {}
+        }
+        if changed {
+            if self.n > MAX_N {
+                self.n = 1;
+            }
+            if self.l >= self.n {
+                self.l = 0;
+            }
+            if self.m > self.l {
+                self.m = 0;
+            }
+            println!("N={} L={} M={}", self.n, self.l, self.m);
+            return true;
+        }
+        return false;
     }
 }
 
@@ -596,7 +672,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 event,
                 device_id: _,
             } => {
-                if app.camera.process_mouse(&event) {
+                if app.process_event(&event) {
                     window.request_redraw();
                 }
             }
@@ -632,6 +708,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 
                 queue.submit(Some(encoder.finish()));
                 frame.present();
+                // XXX: Not needed for regular rendering
+                // window.request_redraw();
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
