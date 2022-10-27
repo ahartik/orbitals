@@ -210,6 +210,7 @@ impl CameraController {
     }
 
     fn process_mouse(&mut self, event: &DeviceEvent) -> bool {
+        // println!("DeviceEvent: {:?}", event);
         match event {
             DeviceEvent::MouseMotion {
                 delta: (dx, dy)
@@ -241,6 +242,29 @@ impl CameraController {
             self.theta.sin() * self.phi.cos(),
             self.theta.sin() * self.phi.sin(),
             self.theta.cos()).cast::<f32>();
+    }
+
+    fn look_matrix(&self, aspect_ratio: f32) -> Mat3f {
+        let look_at = Vec3f::zeros();
+        let pos = self.camera_pos();
+        // This is multiplied by screen-Z (i.e. 1)
+        let look_z : Vec3f = (look_at - pos).normalize();
+        // This is "up"
+        let look_y = Vec3f::new(0.0,0.0,1.0);
+
+        let mut look_x : Vec3f = look_z.cross(&look_y).normalize();
+        let mut look_y : Vec3f = look_x.cross(&look_z).normalize();
+
+        // Correct for FOV and aspect ratio
+        let fov = (75.0 / 180.0)*std::f32::consts::PI;
+        look_x *= (fov/2.0).sin();
+        look_y *= (fov/2.0).sin()/aspect_ratio;
+
+
+        return Mat3f::from_rows(
+            &[look_x.transpose(),
+            look_y.transpose(),
+            look_z.transpose()]);
     }
 }
 
@@ -508,6 +532,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
 fn main() {
     let event_loop = EventLoop::new();
     let window = winit::window::Window::new(&event_loop).unwrap();
+
+    // window.set_cursor_grab(winit::window::CursorGrabMode::Confined).unwrap();
 
 
     let legendre = gen_legendre(5);

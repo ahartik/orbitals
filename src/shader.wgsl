@@ -44,14 +44,14 @@ fn hydrogen(pos: vec3<f32>) -> f32 {
   // Y00:
   // var yfun = sqrt(1.0/(4.0*PI));
   // Y10:
-  var yfun = sqrt(3.0/(4.0*PI)) * costheta;
+  // var yfun = sqrt(3.0/(4.0*PI)) * costheta;
   // Y11:
-  // var yfun = sqrt(3.0/(8.0*PI)) * sintheta;
+  var yfun = sqrt(3.0/(8.0*PI)) * sintheta;
 
   // R10
   // var rfun = 2.0 * exp(-r);
   // R21
-  var rfun = (1.0/(2.0*sqrt(6.0))) *r* exp(-0.5 * r);
+  // var rfun = (1.0/(2.0*sqrt(6.0))) *r* exp(-0.5 * r);
   // R31
   var rfun = (8.0/(27.0*sqrt(6.0)))*(1.0-r/6.0)*r* exp(-r/3.0);
 
