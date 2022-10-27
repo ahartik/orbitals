@@ -250,10 +250,19 @@ impl CameraController {
         // This is multiplied by screen-Z (i.e. 1)
         let look_z : Vec3f = (look_at - pos).normalize();
         // This is "up"
-        let look_y = Vec3f::new(0.0,0.0,1.0);
+        let mut look_y = Vec3f::new(
+            -(self.phi.cos() * self.theta.cos()) as f32,
+            -(self.phi.sin() * self.theta.cos()) as f32,
+            self.theta.sin() as f32);
 
-        let mut look_x : Vec3f = look_z.cross(&look_y).normalize();
-        let mut look_y : Vec3f = look_x.cross(&look_z).normalize();
+        let mut look_x = Vec3f::new(
+                -self.phi.sin() as f32,
+                self.phi.cos() as f32,
+                0.0);
+        // let mut look_x = look_z.cross(&look_y).normalize();
+        // println!("look_x: {}", look_x);
+        // println!("look_y: {}", look_y);
+        // println!("look_z: {}", look_z);
 
         // Correct for FOV and aspect ratio
         let fov = (75.0 / 180.0)*std::f32::consts::PI;
@@ -349,6 +358,9 @@ fn gen_legendre(maxn: usize) -> Vec<Polynomial> {
 }
 
 
+// Largest supported value of N
+const MAX_N: i32 = 5;
+
 // 
 struct AppState {
     camera: CameraController,
@@ -356,6 +368,42 @@ struct AppState {
     n: i32,
     l: i32,
     m: i32,
+    legendre: Vec<Polynomial>
+}
+
+impl AppState {
+    fn new() -> Self {
+        Self {
+            camera: CameraController::new(),
+            aspect_ratio: 1.0,
+            n: 3,
+            l: 2,
+            m: 1,
+            legendre: gen_legendre(MAX_N as usize),
+        }
+    }
+
+    fn update_size(&mut self, w:u32, h:u32) {
+        self.aspect_ratio = (w as f32) / (h as f32);
+    }
+
+    fn uniforms(&self) -> Uniforms {
+        let look_mat = self.camera.look_matrix(self.aspect_ratio);
+        let mut look_mat_array : [[f32; 4]; 3] = [[0.0; 4]; 3];
+        for i in 0..3 {
+            for j in 0..3 {
+                look_mat_array[i][j] = look_mat[(i,j)];
+            }
+        }
+
+        return Uniforms {
+            camera_pos: *self.camera.camera_pos().push(0.0).as_ref(),
+            look_matrix: look_mat_array,
+            quantum_nums: [1.0, 0.0, 0.0, 0.0],
+            rfun_coeff: [1.0, 0.0, 0.0, 0.0],
+        }
+
+    }
 }
 
 async fn run(event_loop: EventLoop<()>, window: Window) {
@@ -456,8 +504,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         alpha_mode: surface.get_supported_alpha_modes(&adapter)[0],
     };
 
-    let mut camera = CameraController::new();
-    let mut aspect_ratio = (size.width as f32) / (size.height as f32);
+    let mut app = AppState::new();
+    app.aspect_ratio = (size.width as f32) / (size.height as f32);
     surface.configure(&device, &config);
 
     event_loop.run(move |event, _, control_flow| {
@@ -476,13 +524,13 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 config.width = size.width;
                 config.height = size.height;
 
-                aspect_ratio = (size.width as f32) / (size.height as f32);
+                app.aspect_ratio = (size.width as f32) / (size.height as f32);
                 surface.configure(&device, &config);
                 // On macos the window needs to be redrawn manually after resizing
                 window.request_redraw();
             },
             Event::DeviceEvent{ event, device_id:_} => {
-                if camera.process_mouse(&event) {
+                if app.camera.process_mouse(&event) {
                     window.request_redraw();
                 }
             },
@@ -493,7 +541,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 let view = frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
-                let uniforms = Uniforms::new(camera.camera_pos(), Vec3f::zeros(), aspect_ratio);
+                let uniforms = app.uniforms();
                 uniform_buffer.queue_update(&queue, &uniforms);
                 let mut encoder =
                     device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
