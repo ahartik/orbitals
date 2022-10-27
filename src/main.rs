@@ -4,7 +4,7 @@ use bytemuck::{Pod, Zeroable};
 
 use wgpu::util::DeviceExt;
 use winit::{
-    event::{Event, WindowEvent, DeviceEvent},
+    event::{DeviceEvent, Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
@@ -54,9 +54,10 @@ struct Uniforms {
     // Same here
     look_matrix: [[f32; 4]; 3],
 
-    quantum_nums:  [f32; 4],
-    // 
-    rfun_coeff: [f32; 4],
+    quantum_nums: [f32; 4],
+    //
+    rfun_coeffs: [f32; 4],
+    yfun_coeffs: [f32; 4],
 }
 
 type Vec3f = na::Vector3<f32>;
@@ -66,57 +67,13 @@ type Mat3f = na::Matrix3<f32>;
 type Vec4f = na::Vector4<f32>;
 type Mat4f = na::Matrix4<f32>;
 
-impl Uniforms {
-    // fn new(pos: &Vec3f, look_at: &Vec3f, up: 
-    fn new(pos: Vec3f, look_at: Vec3f, aspect_ratio: f32) -> Self {
-        // We're converting from "screen" coordinates into our physics coordinates.
-        // In screen coordinates X and Y go from -1 to 1 from bottom left to bottom right.
-        // Z is constant 1.
-        // 
-        // In "physics coordinates" Z is up/down, X is horizontal and Y is depth.
-        
-        // This is multiplied by screen-Z (i.e. 1)
-        let look_z : Vec3f = (look_at - pos).normalize();
-        // This is "up"
-        let look_y = Vec3f::new(0.0,0.0,1.0);
-
-        let mut look_x : Vec3f = look_z.cross(&look_y).normalize();
-        let mut look_y : Vec3f = look_x.cross(&look_z).normalize();
-
-        // Correct for FOV and aspect ratio
-        let fov = (75.0 / 180.0)*std::f32::consts::PI;
-        look_x *= (fov/2.0).sin();
-        look_y *= (fov/2.0).sin()/aspect_ratio;
-
-        // println!("look_x: {}", look_x);
-        // println!("look_y: {}", look_y);
-        // println!("look_z: {}", look_z);
-
-        let mut look_mat_array : [[f32; 4]; 3] = [[0.0; 4]; 3];
-
-        for i in 0..3 {
-            look_mat_array[0][i] = look_x[i];
-            look_mat_array[1][i] = look_y[i];
-            look_mat_array[2][i] = look_z[i];
-        }
-        return Uniforms {
-            camera_pos: *pos.push(0.0).as_ref(),
-            look_matrix: look_mat_array,
-            quantum_nums: [1.0, 0.0, 0.0, 0.0],
-            rfun_coeff: [1.0, 0.0, 0.0, 0.0],
-        }
-    }
-
-}
-
-struct UniformBuffer{
+struct UniformBuffer {
     buffer: wgpu::Buffer,
     layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
 }
 
 impl UniformBuffer {
-
     fn create(device: &wgpu::Device) -> Self {
         let zero_uniforms = Uniforms::zeroed();
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -128,39 +85,40 @@ impl UniformBuffer {
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("my uniforms"),
             layout: &layout,
-            entries: &[
-                wgpu::BindGroupEntry {
+            entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: buffer.as_entire_binding(),
-                    }],
+            }],
         });
         return Self {
-            buffer, layout, bind_group
+            buffer,
+            layout,
+            bind_group,
         };
     }
 
     fn layout<'a>() -> wgpu::BindGroupLayoutDescriptor<'a> {
         wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
                 },
-            ],
+                count: None,
+            }],
             label: Some("uniform_bind_group"),
         }
     }
 
-    fn queue_update(
-        &self, queue: &wgpu::Queue, uniforms: &Uniforms) { 
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(
-                std::array::from_ref(uniforms)));
+    fn queue_update(&self, queue: &wgpu::Queue, uniforms: &Uniforms) {
+        queue.write_buffer(
+            &self.buffer,
+            0,
+            bytemuck::cast_slice(std::array::from_ref(uniforms)),
+        );
     }
 
     /*
@@ -193,87 +151,79 @@ struct CameraController {
     phi: f64,
 }
 
-
 impl CameraController {
     const SENS_X: f64 = 0.004;
     const SENS_Y: f64 = 0.004;
-    const PI : f64 = std::f64::consts::PI;
+    const PI: f64 = std::f64::consts::PI;
 
     fn new() -> Self {
-        Self{
+        Self {
             is_mouse_pressed: false,
             r: 45.0,
-            theta: Self::PI/2.0,
-            phi: (3.0 * Self::PI/2.0),
+            theta: Self::PI / 2.0,
+            phi: (3.0 * Self::PI / 2.0),
         }
-
     }
 
     fn process_mouse(&mut self, event: &DeviceEvent) -> bool {
         // println!("DeviceEvent: {:?}", event);
         match event {
-            DeviceEvent::MouseMotion {
-                delta: (dx, dy)
-            } => {
+            DeviceEvent::MouseMotion { delta: (dx, dy) } => {
                 if self.is_mouse_pressed {
-                    println!("move {}, {}", dx, dy);
+                    // println!("move {}, {}", dx, dy);
                     self.phi -= Self::SENS_X * dx;
                     self.phi %= 2.0 * Self::PI;
                     self.theta -= Self::SENS_Y * dy;
                     self.theta = self.theta.clamp(0.0, Self::PI);
-                
+
                     return true;
                 } else {
                     return false;
                 }
             }
             DeviceEvent::Button { button, state } => {
-                println!("button: {}", button);
+                // println!("button: {}", button);
                 self.is_mouse_pressed = *state == winit::event::ElementState::Pressed;
                 return false;
-
             }
-            _ => false
+            _ => false,
         }
     }
 
     fn camera_pos(&self) -> Vec3f {
-        return (self.r as f32) * Vec3d::new(
-            self.theta.sin() * self.phi.cos(),
-            self.theta.sin() * self.phi.sin(),
-            self.theta.cos()).cast::<f32>();
+        return (self.r as f32)
+            * Vec3d::new(
+                self.theta.sin() * self.phi.cos(),
+                self.theta.sin() * self.phi.sin(),
+                self.theta.cos(),
+            )
+            .cast::<f32>();
     }
 
     fn look_matrix(&self, aspect_ratio: f32) -> Mat3f {
         let look_at = Vec3f::zeros();
         let pos = self.camera_pos();
         // This is multiplied by screen-Z (i.e. 1)
-        let look_z : Vec3f = (look_at - pos).normalize();
+        let look_z: Vec3f = (look_at - pos).normalize();
         // This is "up"
         let mut look_y = Vec3f::new(
             -(self.phi.cos() * self.theta.cos()) as f32,
             -(self.phi.sin() * self.theta.cos()) as f32,
-            self.theta.sin() as f32);
+            self.theta.sin() as f32,
+        );
 
-        let mut look_x = Vec3f::new(
-                -self.phi.sin() as f32,
-                self.phi.cos() as f32,
-                0.0);
+        let mut look_x = Vec3f::new(-self.phi.sin() as f32, self.phi.cos() as f32, 0.0);
         // let mut look_x = look_z.cross(&look_y).normalize();
         // println!("look_x: {}", look_x);
         // println!("look_y: {}", look_y);
         // println!("look_z: {}", look_z);
 
         // Correct for FOV and aspect ratio
-        let fov = (75.0 / 180.0)*std::f32::consts::PI;
-        look_x *= (fov/2.0).sin();
-        look_y *= (fov/2.0).sin()/aspect_ratio;
+        let fov = (75.0 / 180.0) * std::f32::consts::PI;
+        look_x *= (fov / 2.0).sin();
+        look_y *= (fov / 2.0).sin() / aspect_ratio;
 
-
-        return Mat3f::from_rows(
-            &[look_x.transpose(),
-            look_y.transpose(),
-            look_z.transpose()]);
+        return Mat3f::from_rows(&[look_x.transpose(), look_y.transpose(), look_z.transpose()]);
     }
 }
 
@@ -294,22 +244,49 @@ impl Polynomial {
         if coeffs.is_empty() {
             coeffs.push(0.0);
         }
-        Self {
-            coeffs
-        }
+        Self { coeffs }
+    }
+
+    fn single_term(scale: f64, n: usize) -> Self {
+        let mut c = vec![];
+        c.resize(n + 1, 0.0);
+        c[n] = scale;
+        return Self::from_coeffs(c);
     }
 
     fn mul(&self, o: &Polynomial) -> Self {
         let mut coeffs = vec![];
-        coeffs.resize(1 + (self.coeffs.len()-1)+(o.coeffs.len()-1), 0.0);
+        coeffs.resize(1 + (self.coeffs.len() - 1) + (o.coeffs.len() - 1), 0.0);
         for i in 0..self.coeffs.len() {
             for j in 0..o.coeffs.len() {
-                coeffs[i+j] += self.coeffs[i] * o.coeffs[j];
+                coeffs[i + j] += self.coeffs[i] * o.coeffs[j];
             }
         }
-        return Self {
-            coeffs
-        };
+        return Self { coeffs };
+    }
+
+    fn add(&self, o: &Polynomial) -> Self {
+        let mut coeffs = vec![];
+        coeffs.resize(self.coeffs.len().max(o.coeffs.len()), 0.0);
+        for i in 0..self.coeffs.len() {
+            coeffs[i] += self.coeffs[i];
+        }
+        for i in 0..o.coeffs.len() {
+            coeffs[i] += o.coeffs[i];
+        }
+        return Self { coeffs };
+    }
+
+    fn sub(&self, o: &Polynomial) -> Self {
+        let mut coeffs = vec![];
+        coeffs.resize(self.coeffs.len().max(o.coeffs.len()), 0.0);
+        for i in 0..self.coeffs.len() {
+            coeffs[i] += self.coeffs[i];
+        }
+        for i in 0..o.coeffs.len() {
+            coeffs[i] -= o.coeffs[i];
+        }
+        return Self { coeffs };
     }
 
     fn scale_inplace(&mut self, a: f64) {
@@ -320,7 +297,7 @@ impl Polynomial {
 
     fn diff_inplace(&mut self) {
         for i in 1..self.coeffs.len() {
-            self.coeffs[i-1] = (i as f64) * self.coeffs[i];
+            self.coeffs[i - 1] = (i as f64) * self.coeffs[i];
         }
         self.coeffs.pop();
         if self.coeffs.is_empty() {
@@ -329,26 +306,25 @@ impl Polynomial {
     }
 }
 
-
 fn gen_legendre(maxn: usize) -> Vec<Polynomial> {
     // (x^2-1)^n
-    let mut base : Vec<Polynomial> = vec![];
+    let mut base: Vec<Polynomial> = vec![];
     let mut last = Polynomial::from_coeffs(vec![1.0]);
     let x2 = Polynomial::from_coeffs(vec![-1.0, 0.0, 1.0]);
 
     base.push(last.clone());
 
-    for _ in 1..(maxn+1) {
+    for _ in 1..(maxn + 1) {
         last = last.mul(&x2);
         base.push(last.clone());
     }
 
-    let mut res : Vec<Polynomial> = vec![];
+    let mut res: Vec<Polynomial> = vec![];
     res.push(Polynomial::from_coeffs(vec![1.0]));
-    for n in 1..(maxn+1) {
+    for n in 1..(maxn + 1) {
         // P_n = (1/(2^n * n!))(d/dx)^n (x^2-1)^n
         let mut p = base[n].clone(); // (x^2-1)^n
-        for k in 1..(n+1) {
+        for k in 1..(n + 1) {
             p.diff_inplace();
             p.scale_inplace(1.0 / (2.0 * (k as f64)));
         }
@@ -357,18 +333,48 @@ fn gen_legendre(maxn: usize) -> Vec<Polynomial> {
     return res;
 }
 
+fn factorial(n: usize) -> f64 {
+    if n == 0 {
+        return 1.0;
+    }
+    return (n as f64) * factorial(n - 1);
+}
+
+fn gen_laguerre(maxn: usize) -> Vec<Polynomial> {
+    let mut res: Vec<Polynomial> = vec![];
+    let mut b = Polynomial::from_coeffs(vec![1.0]);
+    for n in 0..(maxn + 1) {
+        let mut z = b.clone();
+        //println!("z: {:?}", z);
+        for _ in 0..n {
+            let mut w = z.clone();
+            w.diff_inplace();
+            //println!("w: {:?}", w);
+            z = w.sub(&z);
+            //println!("z: {:?}", z);
+        }
+        //println!("z2: {:?}", z);
+        z.scale_inplace(1.0 / factorial(n));
+        res.push(z);
+        // b = x**(n+1) for next iter
+        *b.coeffs.last_mut().unwrap() = 0.0;
+        b.coeffs.push(1.0);
+    }
+    return res;
+}
 
 // Largest supported value of N
 const MAX_N: i32 = 5;
 
-// 
+//
 struct AppState {
     camera: CameraController,
     aspect_ratio: f32,
     n: i32,
     l: i32,
     m: i32,
-    legendre: Vec<Polynomial>
+    legendre: Vec<Polynomial>,
+    laguerre: Vec<Polynomial>,
 }
 
 impl AppState {
@@ -378,31 +384,88 @@ impl AppState {
             aspect_ratio: 1.0,
             n: 3,
             l: 2,
-            m: 1,
+            m: 0,
             legendre: gen_legendre(MAX_N as usize),
+            laguerre: gen_laguerre((2 * MAX_N) as usize),
         }
     }
 
-    fn update_size(&mut self, w:u32, h:u32) {
+    fn update_size(&mut self, w: u32, h: u32) {
         self.aspect_ratio = (w as f32) / (h as f32);
+    }
+
+    fn assoc_laguerre(&self, q: i32, p: i32) -> Polynomial {
+        let mut poly = self.laguerre[(q + p) as usize].clone();
+        for _ in 0..p {
+            poly.diff_inplace();
+        }
+        poly.scale_inplace((-1.0 as f64).powi(p));
+        return poly;
+    }
+
+    fn assoc_legendre(&self, l: i32, m: i32) -> Polynomial {
+        assert!(m >= 0);
+        let mut poly = self.legendre[l as usize].clone();
+        for _ in 0..m {
+            poly.diff_inplace();
+        }
+        poly.scale_inplace((-1.0 as f64).powi(m));
+        return poly;
     }
 
     fn uniforms(&self) -> Uniforms {
         let look_mat = self.camera.look_matrix(self.aspect_ratio);
-        let mut look_mat_array : [[f32; 4]; 3] = [[0.0; 4]; 3];
+        let mut look_mat_array: [[f32; 4]; 3] = [[0.0; 4]; 3];
         for i in 0..3 {
             for j in 0..3 {
-                look_mat_array[i][j] = look_mat[(i,j)];
+                look_mat_array[i][j] = look_mat[(i, j)];
             }
+        }
+
+        // Coefficients for R(r):
+        let rmul = f64::sqrt(
+            (2.0 / (self.n as f64)).powi(3) * factorial((self.n - self.l - 1) as usize)
+                / (2.0 * (self.n as f64) * factorial((self.n + self.l) as usize)),
+        );
+        let p = 2 * self.l + 1;
+        let q = self.n - self.l - 1;
+        let mut rfun = self.assoc_laguerre(q, p);
+        for i in 0..rfun.coeffs.len() {
+            rfun.coeffs[i] *= (2.0 / (self.n as f64)).powi(i as i32);
+        }
+        // println!("L_{}^{} {:?}", q, p, rfun);
+        rfun.scale_inplace(rmul);
+
+        rfun = rfun.mul(&Polynomial::single_term(
+            (2.0 / (self.n as f64)).powi(self.l),
+            self.l as usize,
+        ));
+
+        let mut rfun_coeffs: [f32; 4] = [0.0; 4];
+        assert!(rfun.coeffs.len() <= 4);
+        for i in 0..rfun.coeffs.len() {
+            rfun_coeffs[i] = rfun.coeffs[i] as f32;
+        }
+
+        // Coefficients for Y(theta, phi):
+        let mut yfun = self.assoc_legendre(self.l, self.m.abs());
+        yfun.scale_inplace(f64::sqrt(
+            ((2 * self.l + 1) as f64 / (4.0 * std::f64::consts::PI))
+                * (factorial((self.l - self.m) as usize) / factorial((self.l + self.m) as usize)),
+        ));
+        let mut yfun_coeffs: [f32; 4] = [0.0; 4];
+        assert!(yfun.coeffs.len() <= 4);
+        for i in 0..yfun.coeffs.len() {
+            yfun_coeffs[i] = yfun.coeffs[i] as f32;
         }
 
         return Uniforms {
             camera_pos: *self.camera.camera_pos().push(0.0).as_ref(),
             look_matrix: look_mat_array,
-            quantum_nums: [1.0, 0.0, 0.0, 0.0],
-            rfun_coeff: [1.0, 0.0, 0.0, 0.0],
-        }
-
+            quantum_nums: [self.n as f32, self.l as f32, self.m as f32, 0.0],
+            rfun_coeffs,
+            yfun_coeffs,
+        };
     }
 }
 
@@ -528,12 +591,15 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 surface.configure(&device, &config);
                 // On macos the window needs to be redrawn manually after resizing
                 window.request_redraw();
-            },
-            Event::DeviceEvent{ event, device_id:_} => {
+            }
+            Event::DeviceEvent {
+                event,
+                device_id: _,
+            } => {
                 if app.camera.process_mouse(&event) {
                     window.request_redraw();
                 }
-            },
+            }
             Event::RedrawRequested(_) => {
                 let frame = surface
                     .get_current_texture()
@@ -564,7 +630,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     rpass.draw(0..(QUAD_VERTICES.len() as u32), 0..1);
                 }
 
-
                 queue.submit(Some(encoder.finish()));
                 frame.present();
             }
@@ -583,10 +648,13 @@ fn main() {
 
     // window.set_cursor_grab(winit::window::CursorGrabMode::Confined).unwrap();
 
-
     let legendre = gen_legendre(5);
     for x in legendre {
-        println!("{:?}", x);
+        println!("Legendre: {:?}", x);
+    }
+    let lag = gen_laguerre(5);
+    for x in lag {
+        println!("Laguerre: {:?}", x);
     }
 
     #[cfg(not(target_arch = "wasm32"))]

@@ -22,7 +22,8 @@ struct Uniforms {
   camera_pos: vec3<f32>,
   look_matrix: mat3x3<f32>,
   quantum_nums: vec3<f32>,
-  rfun_coeff: vec4<f32>,
+  rfun_coeffs: vec4<f32>,
+  yfun_coeffs: vec4<f32>,
 }
 
 @group(0)
@@ -34,36 +35,49 @@ var<uniform> uniforms: Uniforms;
 
 let PI : f32 = 3.14159265;
 
-fn hydrogen(pos: vec3<f32>) -> f32 {
+fn hydrogen(uni: Uniforms, pos: vec3<f32>) -> f32 {
+  var rfun_coeffs = uni.rfun_coeffs;
+  var n = uni.quantum_nums.x;
+  var l = uni.quantum_nums.y;
+  var m = uni.quantum_nums.z;
+
   var r = length(pos);
   // let theta = atan2(r, pos.z);
   let costheta = pos.z / r;
   let sintheta = length(vec2(pos.x,pos.y)) / r;
   // let sintheta = sin(theta);
 
+
   // Y00:
   // var yfun = sqrt(1.0/(4.0*PI));
   // Y10:
   // var yfun = sqrt(3.0/(4.0*PI)) * costheta;
   // Y11:
-  var yfun = sqrt(3.0/(8.0*PI)) * sintheta;
+  // var yfun = sqrt(3.0/(8.0*PI)) * sintheta;
+  
+  let thetapows =
+    vec4(1.0, costheta, costheta * costheta, costheta * costheta * costheta);
+  var yfun = dot(uni.yfun_coeffs, thetapows) * pow(sintheta, m);
 
   // R10
   // var rfun = 2.0 * exp(-r);
   // R21
   // var rfun = (1.0/(2.0*sqrt(6.0))) *r* exp(-0.5 * r);
   // R31
-  var rfun = (8.0/(27.0*sqrt(6.0)))*(1.0-r/6.0)*r* exp(-r/3.0);
+  // var rfun = (8.0/(27.0*sqrt(6.0)))*(1.0-r/6.0)*r* exp(-r/3.0);
+
+  var rpows = vec4(1.0, r, r * r, r * r * r);
+  var rfun = dot(rfun_coeffs, rpows) * exp(-r / n);
 
   var wave = yfun * rfun;
   return wave * wave;
 }
 
-fn normal(pos: vec3<f32>, cval: f32) -> vec3<f32> {
+fn normal(uni: Uniforms, pos: vec3<f32>, cval: f32) -> vec3<f32> {
   let H  = 0.05;
-  let ddx = (hydrogen(pos + vec3(H, 0.0, 0.0))-cval) / H;
-  let ddy = (hydrogen(pos + vec3(0.0, H, 0.0))-cval) / H;
-  let ddz = (hydrogen(pos + vec3(0.0, 0.0, H))-cval) / H;
+  let ddx = (hydrogen(uni, pos + vec3(H, 0.0, 0.0))-cval) / H;
+  let ddy = (hydrogen(uni, pos + vec3(0.0, H, 0.0))-cval) / H;
+  let ddz = (hydrogen(uni, pos + vec3(0.0, 0.0, H))-cval) / H;
   return -normalize(vec3(ddx, ddy, ddz));
 }
 
@@ -107,11 +121,11 @@ fn fs_main(vertex: VertexOutput) -> @location(0) vec4<f32> {
   var dist = 0.0;
   var m = -1.0;
   for (var i: i32 = 0; i < N;  i++) {
-    let h = hydrogen(pos);
+    let h = hydrogen(uniforms, pos);
     if h > LIMIT {
       // dist /= MAX_DIST;
       // return vec4(dist, dist, dist, 1.0);
-       let n = normal(pos, h);
+       let n = normal(uniforms, pos, h);
        // return vec4(vec3(0.5, 0.5, 0.5) + 0.5*n, 1.0);
        // return vec4(n, 1.0);
        return lighting(pos, n, light_pos);
