@@ -14,3 +14,8 @@ pollster = "0.2"
 bytemuck = { version = "1.12.1", features = ["derive"] }
 nalgebra = "0.31.2"
 rand = "0.8.5"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
