@@ -62,7 +62,7 @@ struct Uniforms {
     yfun_coeffs: [f32; 4],
     rand: u32,
     surf_limit: f32,
-    max_phi: f32,
+    enable_cuts: u32,
     end_padding: [u32; 1],
 }
 
@@ -195,10 +195,11 @@ impl CameraController {
             DeviceEvent::MouseWheel{
                 delta: winit::event::MouseScrollDelta::LineDelta(_x, y)
             } => {
+                println!("scroll {}", y);
                 if *y > 0.0 {
-                    self.r *= 1.125;
+                    self.r *= 1.0 + *y as f64;
                 } else {
-                    self.r /= 1.125;
+                    self.r /= 1.0 - *y as f64;
                 }
                 return true;
             }
@@ -486,13 +487,7 @@ return Uniforms {
             yfun_coeffs,
             rand: rand::random::<u32>(),
             surf_limit: self.surf_limit as f32,
-            max_phi: 
-                if self.enable_cuts {
-                    0.5 * std::f32::consts::PI
-                } else {
-                    2.0 * std::f32::consts::PI
-                }
-            ,
+            enable_cuts: self.enable_cuts as u32,
             end_padding: [0],
         };
     }
