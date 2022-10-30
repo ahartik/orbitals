@@ -404,6 +404,7 @@ impl AppState {
             n: 3,
             l: 0,
             m: 0,
+            // Matches 0.25/nm^3 from Griffiths page 153
             surf_limit: 3.7e-05,
             enable_cuts: false,
             legendre: gen_legendre(MAX_N as usize),
@@ -479,7 +480,7 @@ impl AppState {
         for i in 0..yfun.coeffs.len() {
             yfun_coeffs[i] = yfun.coeffs[i] as f32;
         }
-return Uniforms {
+        return Uniforms {
             camera_pos: *self.camera.camera_pos().push(0.0).as_ref(),
             look_matrix: look_mat_array,
             quantum_nums: [self.n as f32, self.l as f32, self.m as f32, 0.0],
@@ -573,15 +574,15 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         .request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("the_device"),
-                features: wgpu::Features::empty(),
-
+                features: wgpu::Features::TIMESTAMP_QUERY,
                 // WebGL doesn't support all of wgpu's features, so if
                 // we're building for the web we'll have to disable some.
-                limits: if cfg!(target_arch = "wasm32") {
-                    wgpu::Limits::downlevel_webgl2_defaults()
-                } else {
-                    wgpu::Limits::default()
-                },
+                limits: wgpu::Limits::downlevel_webgl2_defaults()
+                // limits: if cfg!(target_arch = "wasm32") {
+                //     wgpu::Limits::downlevel_webgl2_defaults()
+                // } else {
+                //     wgpu::Limits::default()
+                // },
             },
             None,
         )
@@ -652,8 +653,15 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         alpha_mode: surface.get_supported_alpha_modes(&adapter)[0],
     };
 
+    let ts_queryset = device.create_query_set(
+        &wgpu::QuerySetDescriptor {
+            label: Some("ts_query"),
+            ty: wgpu_types::QueryType::Timestamp,
+            count: 2,
+        });
+
     let mut app = AppState::new();
-    app.aspect_ratio = (size.width as f32) / (size.height as f32);
+    app.update_size(size.width, size.height);
     surface.configure(&device, &config);
 
     event_loop.run(move |event, _, control_flow| {
@@ -672,7 +680,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 config.width = size.width;
                 config.height = size.height;
 
-                app.aspect_ratio = (size.width as f32) / (size.height as f32);
+                app.update_size(size.width, size.height);
                 surface.configure(&device, &config);
                 // On macos the window needs to be redrawn manually after resizing
                 window.request_redraw();
@@ -686,6 +694,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 }
             }
             Event::RedrawRequested(_) => {
+                let frame_start = std::time::Instant::now();
                 let frame = surface
                     .get_current_texture()
                     .expect("Failed to acquire next swap chain texture");
@@ -694,8 +703,10 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     .create_view(&wgpu::TextureViewDescriptor::default());
                 let uniforms = app.uniforms();
                 uniform_buffer.queue_update(&queue, &uniforms);
+
                 let mut encoder =
                     device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                encoder.write_timestamp(&ts_queryset, 0);
                 {
                     let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: None,
@@ -714,9 +725,21 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     rpass.set_bind_group(0, &uniform_buffer.bind_group, &[]);
                     rpass.draw(0..(QUAD_VERTICES.len() as u32), 0..1);
                 }
+                encoder.write_timestamp(&ts_queryset, 1);
 
                 queue.submit(Some(encoder.finish()));
                 frame.present();
+
+                device.poll(wgpu::Maintain::Wait);
+                let dt = frame_start.elapsed();
+                println!("render time: {:.4}s", dt.as_secs_f64());
+
+                // queue.on_submitted_work_done(
+                //     move || {
+                // });
+                // queue.submit(None);
+            }
+            Event::RedrawEventsCleared => {
                 // XXX: Not needed for regular rendering
                 // window.request_redraw();
             }

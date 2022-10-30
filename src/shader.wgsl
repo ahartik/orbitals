@@ -60,14 +60,6 @@ fn hydrogen(pos: vec3<f32>) -> f32 {
     return 0.0;
   }
 
-
-  // Y00:
-  // var yfun = sqrt(1.0/(4.0*PI));
-  // Y10:
-  // var yfun = sqrt(3.0/(4.0*PI)) * costheta;
-  // Y11:
-  // var yfun = sqrt(3.0/(8.0*PI)) * sintheta;
-  
   let thetapows =
     vec4(1.0, costheta, costheta * costheta, costheta * costheta * costheta);
   // "Real" orbitals
@@ -75,13 +67,6 @@ fn hydrogen(pos: vec3<f32>) -> f32 {
   // var yfun = dot(uni.yfun_coeffs, thetapows) * pow(sintheta, m) * cos(m * phi);
   // "Complex" orbitals
   var yfun = dot(uni.yfun_coeffs, thetapows) * pow(sintheta, m);
-
-  // R10
-  // var rfun = 2.0 * exp(-r);
-  // R21
-  // var rfun = (1.0/(2.0*sqrt(6.0))) *r* exp(-0.5 * r);
-  // R31
-  // var rfun = (8.0/(27.0*sqrt(6.0)))*(1.0-r/6.0)*r* exp(-r/3.0);
 
   var rpows = vec4(1.0, r, r * r, r * r * r);
   var rfun = dot(rfun_coeffs, rpows) * exp(-r / n);
@@ -110,8 +95,7 @@ fn normal(pos: vec3<f32>, dpos: vec3<f32>, cval: f32) -> vec3<f32> {
 
   let unit_theta =
     -sintheta * vec3(0.0, 0.0, 1.0)
-    +
-    costheta * vec3(cosphi, sinphi, 0.0);
+    + costheta * vec3(cosphi, sinphi, 0.0);
 
   let ddr = (hydrogen( pos + H* unit_r)-cval) / H;
   let ddtheta = (hydrogen( pos + H * unit_theta)-cval) / H;
@@ -131,7 +115,6 @@ fn normal(pos: vec3<f32>, dpos: vec3<f32>, cval: f32) -> vec3<f32> {
     }
   }
 
-  // return unit_theta;
    return -normalize(
        unit_r * ddr +
        unit_theta * ddtheta +
@@ -152,23 +135,6 @@ fn lighting(pos: vec3<f32>, normal: vec3<f32>, light_pos: vec3<f32>) -> vec4<f32
   return vec4(color, 1.0);
 }
 
-// var seed: u32 = 0;
-
-fn hash(s: u32) -> u32{
-  var seed = s;
-  seed ^= 2747636419u;
-  seed *= 2654435769u;
-  seed ^= seed >> 16u;
-  seed *= 2654435769u;
-  seed ^= seed >> 16u;
-  seed *= 2654435769u;
-  return seed;
-}
-
-fn get_rand(seed: u32) -> f32{
-  return f32(seed) / 4294967295.0;
-}
-
 @fragment
 fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
   var pos = uniforms.camera_pos;
@@ -179,17 +145,7 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
 
   var v = vec3(vertex.pos.x, vertex.pos.y, 1.0);
   var ray = normalize(uniforms.look_matrix * v);
-  // var ray = v;
 
-  var seed : u32 = uniforms.rand +
-    u32((ray.x * ray.x) * 71337231.0 +
-                       vertex.position.y * 7171.0 + vertex.position.x);
-
-  // let LIMIT = 0.0015;
-  // let LIMIT = 0.0015;
-
-  // Matches 0.25/nm^3 from Griffiths page 153
-  // let LIMIT = 3.7e-05;
   let LIMIT = uniforms.surf_limit;
 
   let N = 512;
@@ -211,12 +167,6 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
     }
 
     prob += h * DX;
-    /*
-    seed = hash(seed);
-    if h * DX > 0.01 * get_rand(seed) {
-      return vec4(1000.0 * h, 1.0, 1.0, 1.0);
-    }
-    */
 
     pos += dpos;
     dist += DX;
