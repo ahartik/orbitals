@@ -1,9 +1,9 @@
 - "Ubershaders"
-- Get performance numbers
-- Benchmark
 - Wave functions for N > 4
-- Colors from arg(psi)
-- "real" orbitals
 - Analytical normals
-- Optimize
+- Automatic differentiation
+- Integrate with mathtool lib
+- Benchmark
+- "real" orbitals
+- Optimize MORE
 - Web support and UI

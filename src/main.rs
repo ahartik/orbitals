@@ -401,8 +401,8 @@ impl AppState {
         Self {
             camera: CameraController::new(),
             aspect_ratio: 1.0,
-            n: 3,
-            l: 0,
+            n: 4,
+            l: 2,
             m: 0,
             // Matches 0.25/nm^3 from Griffiths page 153
             surf_limit: 3.7e-05,
