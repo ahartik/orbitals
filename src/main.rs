@@ -480,6 +480,8 @@ impl AppState {
         for i in 0..yfun.coeffs.len() {
             yfun_coeffs[i] = yfun.coeffs[i] as f32;
         }
+        println!("rfun: {:?}", rfun);
+        println!("yfun: {:?}", yfun);
         return Uniforms {
             camera_pos: *self.camera.camera_pos().push(0.0).as_ref(),
             look_matrix: look_mat_array,
