@@ -77,13 +77,17 @@ impl ShaderBuilder {
                     / (2.0 * (n as f64) * factorial((n + l) as usize)),
             );
             rfun.scale_inplace(rmul);
+            rfun = rfun.mul(&Polynomial::single_term(
+                (2.0 / (n as f64)).powi(l),
+                l as usize,
+            ));
 
             let ncoeffs = rfun.coeffs.len();
             let nvecs = (ncoeffs + 3) / 4;
             writeln!(wave, "let rpows0 = vec4(1.0, r, r * r, r * r * r);").unwrap();
-            for i in 1..nvecs {
-                writeln!(wave, "let rpows{} = pow(r, {:.1}) * rpows0;", i, i as f64).unwrap();
-            }
+            // for i in 1..nvecs {
+            //     writeln!(wave, "let rpows{} = pow(r, {:.1}) * rpows0;", i, (4 * i) as f64).unwrap();
+            // }
             writeln!(wave, "var rfun : f32 = 0.0;").unwrap();
             for i in 0..nvecs {
                 let mut coeffs: [f64; 4] = [0.0; 4];
@@ -93,14 +97,13 @@ impl ShaderBuilder {
                         coeffs[j] = rfun.coeffs[p];
                     }
                 }
-
                 writeln!(
                     wave,
-                    "let rcoeff{} = vec4({:.8}, {:.8}, {:.8}, {:.8});",
+                    "let rcoeff{} = vec4({:.8e}, {:.8e}, {:.8e}, {:.8e});",
                     i, coeffs[0], coeffs[1], coeffs[2], coeffs[3]
                 )
                 .unwrap();
-                writeln!(wave, "rfun += dot(rpows{}, rcoeff{});", i, i).unwrap();
+                writeln!(wave, "rfun += dot(rpows0, pow(r, {:.1})* rcoeff{});", (4*i) as f64, i).unwrap();
             }
         }
         writeln!(wave, "rfun *= exp(-r / {:.1});", n as f64).unwrap();
@@ -114,13 +117,14 @@ impl ShaderBuilder {
             ));
             let ncoeffs = yfun.coeffs.len();
             writeln!(wave, "var yfun : f32 = 0.0;").unwrap();
+            /*
             for i in 0..ncoeffs {
                 if yfun.coeffs[i] != 0.0 {
                     writeln!(wave, "yfun += pow(costheta, {:.1}) * {:.8};",
                     i as f64, yfun.coeffs[i]).unwrap();
                 }
             }
-            /*
+            */
             writeln!(wave,
                 "let cospows0 : vec4<f32>= vec4(1.0, costheta, costheta * costheta, costheta * costheta * costheta);").unwrap();
             let nvecs = (ncoeffs + 3) / 4;
@@ -128,7 +132,7 @@ impl ShaderBuilder {
                 writeln!(
                     wave,
                     "let cospows{} = pow(costheta, {:.1}) * rpows0;",
-                    i, i as f64
+                    i, (4 * i) as f64
                 )
                 .unwrap();
             }
@@ -143,17 +147,17 @@ impl ShaderBuilder {
 
                 writeln!(
                     wave,
-                    "let ycoeff{} : vec4<f32> = vec4({:.8}, {:.8}, {:.8}, {:.8});",
+                    "let ycoeff{} : vec4<f32> = vec4({:.8e}, {:.8e}, {:.8e}, {:.8e});",
                     i, coeffs[0], coeffs[1], coeffs[2], coeffs[3]
                 )
                 .unwrap();
                 writeln!(wave, "yfun += dot(cospows{}, ycoeff{});", i, i).unwrap();
-            }*/
+            }
             writeln!(wave, "yfun *= pow(sintheta, {:.1});", m as f64).unwrap();
         }
 
         writeln!(wave, "return (yfun * rfun);").unwrap();
-        if m == 0 {
+        if m == 0 && l == 6 {
             println!("{}", wave);
         }
 

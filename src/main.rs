@@ -320,7 +320,7 @@ impl Polynomial {
 }
 
 // Largest supported value of N
-const MAX_N: usize = 4;
+const MAX_N: usize = 8;
 
 //
 struct AppState {
@@ -533,7 +533,10 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     let mut pipelines = std::collections::HashMap::<ShaderParams, wgpu::RenderPipeline>::new();
     let builder = ShaderBuilder::new(MAX_N);
 
+    let mut shader_count = 0;
+    let build_start_time = std::time::Instant::now();
     for params in builder.all_params() {
+        shader_count += 1;
         let shader_src: String = builder.build(&params);
         // Load the shaders from disk
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -574,6 +577,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         pipelines.insert(params, render_pipeline);
         println!("Built: {:?}", params);
     }
+    println!("Built {} shaders in {:.2}s", shader_count, build_start_time.elapsed().as_secs_f64());
 
     let mut config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,

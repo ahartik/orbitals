@@ -248,8 +248,7 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
 
     last_pos = pos;
     pos += dpos;
-
   }
-  prob *= 100.0;
+  prob *= 125.0;
   return vec4(prob, prob, prob, 1.0);
 }
