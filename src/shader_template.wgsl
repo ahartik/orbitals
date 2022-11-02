@@ -44,14 +44,14 @@ let M : i32 = VAL_M;
 // - PHI_SYMMETRIC
 
 fn hydrogen_wave(pos: vec3<f32>) -> f32 {
-  let r = length(pos);
+  let r : f32 = length(pos);
 
-  let xylen = length(vec2(pos.x, pos.y));
-  let costheta = pos.z / r;
-  let sintheta = xylen / r;
+  let xylen : f32 = length(vec2(pos.x, pos.y));
+  let costheta : f32 = pos.z / r;
+  let sintheta : f32 = xylen / r;
 
-  let cosphi = pos.x / xylen;
-  let sinphi = pos.y / xylen;
+  let cosphi : f32 = pos.x / xylen;
+  let sinphi : f32 = pos.y / xylen;
 
   WAVE_FUNC
 }

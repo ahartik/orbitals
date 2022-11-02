@@ -113,9 +113,17 @@ impl ShaderBuilder {
                     * (factorial((l - m) as usize) / factorial((l + m) as usize)),
             ));
             let ncoeffs = yfun.coeffs.len();
-            let nvecs = (ncoeffs + 3) / 4;
+            writeln!(wave, "var yfun : f32 = 0.0;").unwrap();
+            for i in 0..ncoeffs {
+                if yfun.coeffs[i] != 0.0 {
+                    writeln!(wave, "yfun += pow(costheta, {:.1}) * {:.8};",
+                    i as f64, yfun.coeffs[i]).unwrap();
+                }
+            }
+            /*
             writeln!(wave,
-                "let cospows0 = vec4(1.0, costheta, costheta * costheta, costheta * costheta * costheta);").unwrap();
+                "let cospows0 : vec4<f32>= vec4(1.0, costheta, costheta * costheta, costheta * costheta * costheta);").unwrap();
+            let nvecs = (ncoeffs + 3) / 4;
             for i in 1..nvecs {
                 writeln!(
                     wave,
@@ -124,7 +132,6 @@ impl ShaderBuilder {
                 )
                 .unwrap();
             }
-            writeln!(wave, "var yfun : f32 = 0.0;").unwrap();
             for i in 0..nvecs {
                 let mut coeffs: [f64; 4] = [0.0; 4];
                 for j in 0..4 {
@@ -136,17 +143,19 @@ impl ShaderBuilder {
 
                 writeln!(
                     wave,
-                    "let ycoeff{} = vec4({:.8}, {:.8}, {:.8}, {:.8});",
+                    "let ycoeff{} : vec4<f32> = vec4({:.8}, {:.8}, {:.8}, {:.8});",
                     i, coeffs[0], coeffs[1], coeffs[2], coeffs[3]
                 )
                 .unwrap();
                 writeln!(wave, "yfun += dot(cospows{}, ycoeff{});", i, i).unwrap();
-            }
+            }*/
             writeln!(wave, "yfun *= pow(sintheta, {:.1});", m as f64).unwrap();
         }
 
-        writeln!(wave, "return rfun * yfun;").unwrap();
-        println!("{}", wave);
+        writeln!(wave, "return (yfun * rfun);").unwrap();
+        if m == 0 {
+            println!("{}", wave);
+        }
 
         ctx.define("WAVE_FUNC", wave);
         return minipre::process_str(TEMPLATE, &mut ctx).unwrap();
