@@ -21,18 +21,10 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 struct Uniforms {
   camera_pos: vec3<f32>,
   look_matrix: mat3x3<f32>,
-  quantum_nums: vec3<f32>,
-  rfun_coeffs: vec4<f32>,
-  yfun_coeffs: vec4<f32>,
 
   // All non-vector stuff should be in the end:
-  rand: u32,
   surf_limit: f32,
-  cut_half: u32,
-  padding: f32
 }
-
-struct 
 
 @group(0)
 @binding(0)
@@ -46,34 +38,22 @@ let M : i32 = VAL_M;
 // Defines:
 // TODO: Modify minipre lib so that the existance of these is verified:
 // - REAL_ORBITALS
-// - ENABLE_CUTS
+// - CUT_HALF
 // - YFUNC
 // - RFUNC
 // - PHI_SYMMETRIC
 
 fn hydrogen_wave(pos: vec3<f32>) -> f32 {
-  let uni = uniforms;
-  var rfun_coeffs = uni.rfun_coeffs;
-  var n = uni.quantum_nums.x;
-  var l = uni.quantum_nums.y;
-  var m = uni.quantum_nums.z;
-
   let r = length(pos);
+
+  let xylen = length(vec2(pos.x, pos.y));
   let costheta = pos.z / r;
-  let sintheta = length(vec2(pos.x,pos.y)) / r;
+  let sintheta = xylen / r;
 
-  let thetapows =
-    vec4(1.0, costheta, costheta * costheta, costheta * costheta * costheta);
-  // "Real" orbitals
-  // let phi = atan2(pos.y, pos.x);
-  // var yfun = dot(uni.yfun_coeffs, thetapows) * pow(sintheta, m) * cos(m * phi);
-  // "Complex" orbitals
-  var yfun = dot(uni.yfun_coeffs, thetapows) * pow(sintheta, m);
+  let cosphi = pos.x / xylen;
+  let sinphi = pos.y / xylen;
 
-  var rpows = vec4(1.0, r, r * r, r * r * r);
-  var rfun = dot(rfun_coeffs, rpows) * exp(-r / n);
-
-  return yfun * rfun;
+  WAVE_FUNC
 }
 
 fn hydrogen(pos: vec3<f32>) -> f32 {
@@ -105,13 +85,13 @@ fn normal(pos: vec3<f32>, dpos: vec3<f32>, cval: f32) -> vec3<f32> {
   let ddr = (hydrogen( pos + H* unit_r)-cval) / H;
   let ddtheta = (hydrogen( pos + H * unit_theta)-cval) / H;
 
-  // For complex orbitals this is always 0.0
+#if PHI_SYMMETRIC
   // "Complex"
   let ddphi = 0.0;
+#else
   // "Real"
-  // let ddphi = (hydrogen( pos + H * unit_phi)-cval) / H;
-
-  let last_xy = pos.xy - dpos.xy;
+  let ddphi = (hydrogen(pos + H * unit_phi)-cval) / H;
+#endif
 
    return -normalize(
        unit_r * ddr +
@@ -120,13 +100,17 @@ fn normal(pos: vec3<f32>, dpos: vec3<f32>, cval: f32) -> vec3<f32> {
        );
 }
 
-fn pos_color(pos: vec3<f32>) -> vec3<f32>{
+fn pos_color(pos: vec3<f32>) -> vec3<f32> {
   let phi = atan2(pos.y, pos.x);
 
   // "Complex"
-  var arg = uniforms.quantum_nums[2] * (phi + 2.0 * PI);
+#if PHI_SYMMETRIC
+  // TODO: Make this generic input to the shader template.
+  var arg = f32(M) * (phi + 2.0 * PI);
+#else
   // "Real"
-  // var arg = 0.0;
+  var arg = 0.0;
+#endif
 
   let psi = hydrogen_wave(pos);
   if (psi < 0.0) {
@@ -180,7 +164,6 @@ fn lighting(pos: vec3<f32>, normal: vec3<f32>, light_pos: vec3<f32>) -> vec4<f32
 }
 
 
-
 @fragment
 fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
   var pos = uniforms.camera_pos;
@@ -194,16 +177,17 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
 
   let LIMIT = uniforms.surf_limit;
 
-  let N = 256;
+  let EVAL_N = 256;
   let MAX_DIST = 2.0 * length(pos);
-  let DX = MAX_DIST / f32(N);
+  let DX = MAX_DIST / f32(EVAL_N);
   let dpos = DX * ray;
   var dist = 0.0;
   var prob : f32 = 0.0;
   var last = 0.0;
   var last_pos = pos;
 
-  if (uniforms.cut_half!=0u && pos.y < 0.0) {
+#if CUT_HALF
+  if (pos.y < 0.0) {
     if (dpos.y < 0.0) {
       return vec4(0.0, 0.0, 0.0, 0.0);
     }
@@ -214,9 +198,11 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
       return lighting(pos, n, light_pos);
     }
   }
+#endif
 
-  for (var i : i32 = 0; i < N; i++) {
-    if (uniforms.cut_half!=0u && pos.y < -0.0001) {
+  for (var i : i32 = 0; i < EVAL_N; i++) {
+#if CUT_HALF
+    if (pos.y < -0.0001) {
 
       // Change pos back so that pos.y = 0
       pos -= dpos * (pos.y) / dpos.y;
@@ -230,6 +216,7 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
       }
       break;
     }
+#endif
 
     var h = hydrogen(pos);
     if h > LIMIT {
