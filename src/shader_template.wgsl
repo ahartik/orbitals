@@ -43,6 +43,10 @@ let M : i32 = VAL_M;
 // - RFUNC
 // - PHI_SYMMETRIC
 
+fn complex_mul(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
+  return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
 fn hydrogen_wave(pos: vec3<f32>) -> f32 {
   let r : f32 = length(pos);
 
@@ -154,11 +158,11 @@ fn lighting(pos: vec3<f32>, normal: vec3<f32>, light_pos: vec3<f32>) -> vec4<f32
   let base_color = pos_color(pos);
 
   var color = vec3(0.0, 0.0, 0.0);
-  color += 0.3 * base_color;
+  color += 0.2 * base_color;
 
   let to_light = normalize(light_pos - pos);
   // Diffuse lighting
-  color += max(0.0, 0.7 * dot(normal, to_light)) * base_color;
+  color += max(0.0, 0.8 * dot(normal, to_light)) * base_color;
 
   return vec4(color, 1.0);
 }
@@ -249,6 +253,6 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
     last_pos = pos;
     pos += dpos;
   }
-  prob *= 125.0;
+  prob *= 100.0;
   return vec4(prob, prob, prob, 1.0);
 }

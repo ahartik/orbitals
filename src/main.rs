@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 use bytemuck::{Pod, Zeroable};
 
@@ -240,85 +241,6 @@ impl CameraController {
     }
 }
 
-#[derive(Clone, Debug)]
-struct Polynomial {
-    coeffs: Vec<f64>,
-}
-
-impl Polynomial {
-    fn from_coeffs(mut coeffs: Vec<f64>) -> Self {
-        while let Some(x) = coeffs.last() {
-            if *x == 0.0 {
-                coeffs.pop();
-            } else {
-                break;
-            }
-        }
-        if coeffs.is_empty() {
-            coeffs.push(0.0);
-        }
-        Self { coeffs }
-    }
-
-    fn single_term(scale: f64, n: usize) -> Self {
-        let mut c = vec![];
-        c.resize(n + 1, 0.0);
-        c[n] = scale;
-        return Self::from_coeffs(c);
-    }
-
-    fn mul(&self, o: &Polynomial) -> Self {
-        let mut coeffs = vec![];
-        coeffs.resize(1 + (self.coeffs.len() - 1) + (o.coeffs.len() - 1), 0.0);
-        for i in 0..self.coeffs.len() {
-            for j in 0..o.coeffs.len() {
-                coeffs[i + j] += self.coeffs[i] * o.coeffs[j];
-            }
-        }
-        return Self { coeffs };
-    }
-
-    fn add(&self, o: &Polynomial) -> Self {
-        let mut coeffs = vec![];
-        coeffs.resize(self.coeffs.len().max(o.coeffs.len()), 0.0);
-        for i in 0..self.coeffs.len() {
-            coeffs[i] += self.coeffs[i];
-        }
-        for i in 0..o.coeffs.len() {
-            coeffs[i] += o.coeffs[i];
-        }
-        return Self { coeffs };
-    }
-
-    fn sub(&self, o: &Polynomial) -> Self {
-        let mut coeffs = vec![];
-        coeffs.resize(self.coeffs.len().max(o.coeffs.len()), 0.0);
-        for i in 0..self.coeffs.len() {
-            coeffs[i] += self.coeffs[i];
-        }
-        for i in 0..o.coeffs.len() {
-            coeffs[i] -= o.coeffs[i];
-        }
-        return Self { coeffs };
-    }
-
-    fn scale_inplace(&mut self, a: f64) {
-        for i in 0..self.coeffs.len() {
-            self.coeffs[i] *= a;
-        }
-    }
-
-    fn diff_inplace(&mut self) {
-        for i in 1..self.coeffs.len() {
-            self.coeffs[i - 1] = (i as f64) * self.coeffs[i];
-        }
-        self.coeffs.pop();
-        if self.coeffs.is_empty() {
-            self.coeffs.push(0.0);
-        }
-    }
-}
-
 // Largest supported value of N
 const MAX_N: usize = 8;
 
@@ -331,6 +253,7 @@ struct AppState {
     m: i32,
     surf_limit: f64,
     enable_cuts: bool,
+    real_orbital: bool,
 }
 
 impl AppState {
@@ -338,12 +261,13 @@ impl AppState {
         Self {
             camera: CameraController::new(),
             aspect_ratio: 1.0,
-            n: 4,
-            l: 2,
-            m: 0,
+            n: 5,
+            l: 3,
+            m: 2,
             // Matches 0.25/nm^3 from Griffiths page 153
             surf_limit: 3.7e-05,
             enable_cuts: false,
+            real_orbital: true,
         }
     }
 
@@ -357,6 +281,7 @@ impl AppState {
             l: self.l,
             m: self.m,
             cut_half: self.enable_cuts,
+            real_orbital: self.real_orbital,
         };
     }
 
@@ -368,45 +293,6 @@ impl AppState {
                 look_mat_array[i][j] = look_mat[(i, j)];
             }
         }
-        /*
-
-        // Coefficients for R(r):
-        let rmul = f64::sqrt(
-            (2.0 / (self.n as f64)).powi(3) * factorial((self.n - self.l - 1) as usize)
-                / (2.0 * (self.n as f64) * factorial((self.n + self.l) as usize)),
-        );
-        let p = 2 * self.l + 1;
-        let q = self.n - self.l - 1;
-        let mut rfun = self.assoc_laguerre(q, p);
-        for i in 0..rfun.coeffs.len() {
-            rfun.coeffs[i] *= (2.0 / (self.n as f64)).powi(i as i32);
-        }
-        // println!("L_{}^{} {:?}", q, p, rfun);
-        rfun.scale_inplace(rmul);
-
-        rfun = rfun.mul(&Polynomial::single_term(
-            (2.0 / (self.n as f64)).powi(self.l),
-            self.l as usize,
-        ));
-
-        let mut rfun_coeffs: [f32; 4] = [0.0; 4];
-        assert!(rfun.coeffs.len() <= 4);
-        for i in 0..rfun.coeffs.len() {
-            rfun_coeffs[i] = rfun.coeffs[i] as f32;
-        }
-
-        // Coefficients for Y(theta, phi):
-        let mut yfun = self.assoc_legendre(self.l, self.m.abs());
-        yfun.scale_inplace(f64::sqrt(
-            ((2 * self.l + 1) as f64 / (4.0 * std::f64::consts::PI))
-                * (factorial((self.l - self.m) as usize) / factorial((self.l + self.m) as usize)),
-        ));
-        let mut yfun_coeffs: [f32; 4] = [0.0; 4];
-        assert!(yfun.coeffs.len() <= 4);
-        for i in 0..yfun.coeffs.len() {
-            yfun_coeffs[i] = yfun.coeffs[i] as f32;
-        }
-        */
         return Uniforms {
             camera_pos: *self.camera.camera_pos().push(0.0).as_ref(),
             look_matrix: look_mat_array,
@@ -530,20 +416,17 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
 
     let swapchain_format = surface.get_supported_formats(&adapter)[0];
-    let mut pipelines = std::collections::HashMap::<ShaderParams, wgpu::RenderPipeline>::new();
+    let mut pipelines = HashMap::<ShaderParams, wgpu::RenderPipeline>::new();
     let builder = ShaderBuilder::new(MAX_N);
 
-    let mut shader_count = 0;
-    let build_start_time = std::time::Instant::now();
-    for params in builder.all_params() {
-        shader_count += 1;
+    let build_pipeline = move |device: &wgpu::Device, params: &ShaderParams| -> wgpu::RenderPipeline {
         let shader_src: String = builder.build(&params);
         // Load the shaders from disk
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Shaders"),
+            label: Some("OrbitalShader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(shader_src.as_str())),
         });
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        return device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
@@ -574,10 +457,12 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
         });
-        pipelines.insert(params, render_pipeline);
-        println!("Built: {:?}", params);
-    }
-    println!("Built {} shaders in {:.2}s", shader_count, build_start_time.elapsed().as_secs_f64());
+    };
+
+    // TODO: Build shaders on-demand
+//     for params in builder.all_params() {
+//         println!("Built: {:?}", params);
+//     }
 
     let mut config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -588,12 +473,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         alpha_mode: surface.get_supported_alpha_modes(&adapter)[0],
     };
 
-    let ts_queryset = device.create_query_set(&wgpu::QuerySetDescriptor {
-        label: Some("ts_query"),
-        ty: wgpu_types::QueryType::Timestamp,
-        count: 2,
-    });
-
     let mut app = AppState::new();
     app.update_size(size.width, size.height);
     surface.configure(&device, &config);
@@ -602,7 +481,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         // Have the closure take ownership of the resources.
         // `event_loop.run` never returns, therefore we must do this to ensure
         // the resources are properly cleaned up.
-        let _ = (&instance, &adapter, &pipeline_layout);
+        // let _ = (&instance, &adapter, &pipeline_layout);
+        let _ = (&instance, &adapter);
 
         *control_flow = ControlFlow::Wait;
         match event {
@@ -636,15 +516,19 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
 
+                use std::collections::hash_map::Entry;
                 let sp = app.shader_params();
-                let pipeline = pipelines.get(&sp).unwrap();
+                let pipeline_entry = pipelines.entry(sp);
+                let pipeline : &wgpu::RenderPipeline = match pipeline_entry {
+                    Entry::Occupied(e) => e.into_mut(),
+                    Entry::Vacant(e) => e.insert(build_pipeline(&device, &sp)),
+                };
 
                 let uniforms = app.uniforms();
                 uniform_buffer.queue_update(&queue, &uniforms);
 
                 let mut encoder =
                     device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-                encoder.write_timestamp(&ts_queryset, 0);
                 {
                     let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: None,
@@ -663,7 +547,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                     rpass.set_bind_group(0, &uniform_buffer.bind_group, &[]);
                     rpass.draw(0..(QUAD_VERTICES.len() as u32), 0..1);
                 }
-                encoder.write_timestamp(&ts_queryset, 1);
 
                 queue.submit(Some(encoder.finish()));
                 frame.present();

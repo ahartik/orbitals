@@ -6,7 +6,7 @@ pub struct ShaderParams {
     pub l: i32,
     pub m: i32,
     pub cut_half: bool,
-    // real_orbital: bool,
+    pub real_orbital: bool,
 }
 
 static TEMPLATE: &str = include_str!("shader_template.wgsl");
@@ -58,10 +58,7 @@ impl ShaderBuilder {
         ctx.define("VAL_L", format!("{:.1}", l));
         ctx.define("VAL_M", format!("{:.1}", m));
         ctx.define("CUT_HALF", if params.cut_half { "1" } else { "0" });
-        // TODO: 0 if real
-        ctx.define("PHI_SYMMETRIC", "1");
-
-
+        ctx.define("PHI_SYMMETRIC", if params.real_orbital {"0"} else {"1"});
 
         let mut wave = String::new();
         // rfun
@@ -85,9 +82,9 @@ impl ShaderBuilder {
             let ncoeffs = rfun.coeffs.len();
             let nvecs = (ncoeffs + 3) / 4;
             writeln!(wave, "let rpows0 = vec4(1.0, r, r * r, r * r * r);").unwrap();
-            // for i in 1..nvecs {
-            //     writeln!(wave, "let rpows{} = pow(r, {:.1}) * rpows0;", i, (4 * i) as f64).unwrap();
-            // }
+            for i in 1..nvecs {
+                writeln!(wave, "let rpows{} = r *rpows{}.w * rpows0;", i, i-1).unwrap();
+            }
             writeln!(wave, "var rfun : f32 = 0.0;").unwrap();
             for i in 0..nvecs {
                 let mut coeffs: [f64; 4] = [0.0; 4];
@@ -101,8 +98,7 @@ impl ShaderBuilder {
                     wave,
                     "let rcoeff{} = vec4({:.8e}, {:.8e}, {:.8e}, {:.8e});",
                     i, coeffs[0], coeffs[1], coeffs[2], coeffs[3]
-                )
-                .unwrap();
+                ).unwrap();
                 writeln!(wave, "rfun += dot(rpows0, pow(r, {:.1})* rcoeff{});", (4*i) as f64, i).unwrap();
             }
         }
@@ -131,8 +127,8 @@ impl ShaderBuilder {
             for i in 1..nvecs {
                 writeln!(
                     wave,
-                    "let cospows{} = pow(costheta, {:.1}) * rpows0;",
-                    i, (4 * i) as f64
+                    "let cospows{} = costheta * cospows{}.w * cospows0;",
+                    i, i-1
                 )
                 .unwrap();
             }
@@ -153,7 +149,35 @@ impl ShaderBuilder {
                 .unwrap();
                 writeln!(wave, "yfun += dot(cospows{}, ycoeff{});", i, i).unwrap();
             }
-            writeln!(wave, "yfun *= pow(sintheta, {:.1});", m as f64).unwrap();
+            for _ in 0..m {
+                writeln!(wave, "yfun *= sintheta;").unwrap();
+            }
+            if params.real_orbital && m != 0 {
+                writeln!(wave, "let phiz = vec2(pos.x, pos.y) / xylen;").unwrap();
+                writeln!(wave, "var z = phiz;").unwrap();
+                // TODO: This can be made logarithmic in m if more optimization is desired.
+                for _ in 1..m {
+                    writeln!(wave, "z = complex_mul(z, phiz);").unwrap();
+                }
+                writeln!(wave, "yfun *= z.x;").unwrap();
+                /*
+                writeln!(wave, "let cosphi = pos.x / xylen;").unwrap();
+                writeln!(wave, "let sinphi = pos.y / xylen;").unwrap();
+                writeln!(wave, "var cosa = cosphi;").unwrap();
+                writeln!(wave, "var sina = sinphi;").unwrap();
+                writeln!(wave, "var tmp = 0.0;").unwrap();
+                for _ in 1..m {
+                    writeln!(wave, "tmp = cosa * cosphi - sina * sinphi;").unwrap();
+                    writeln!(wave, "sina = sina * cosphi + cosa * sinphi;").unwrap();
+                    writeln!(wave, "cosa = tmp;").unwrap();
+                }
+                writeln!(wave, "yfun *= cosa;").unwrap();
+                */
+                /*
+                writeln!(wave, "let phi = atan2(pos.y, pos.x);").unwrap();
+                writeln!(wave, "yfun *= cos({:.1} * phi);", m as f64).unwrap();
+                */
+            }
         }
 
         writeln!(wave, "return (yfun * rfun);").unwrap();
@@ -176,12 +200,14 @@ impl ShaderBuilder {
                         l,
                         m,
                         cut_half: false,
+                        real_orbital: true,
                     });
                     res.push(ShaderParams {
                         n,
                         l,
                         m,
                         cut_half: true,
+                        real_orbital: true,
                     });
                 }
             }
