@@ -1,14 +1,8 @@
-- "Ubershaders"
-  - Find a good preprocessor library
-  - 
-- Cleaner lib for generating wave function
+- Cleaner lib for generating wave function (done partly)
   - Integrate with mathtool lib
   - Automatic differentiation
+- Grid or axis thing
 - Analytical normals
-- Wave functions for N > 4
-  - Ubershaders first
-
 - Benchmark
-- "real" orbitals
 - Optimize MORE
 - Web support and UI

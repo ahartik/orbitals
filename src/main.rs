@@ -67,8 +67,8 @@ type Vec3f = na::Vector3<f32>;
 type Vec3d = na::Vector3<f64>;
 type Mat3f = na::Matrix3<f32>;
 
-type Vec4f = na::Vector4<f32>;
-type Mat4f = na::Matrix4<f32>;
+// type Vec4f = na::Vector4<f32>;
+// type Mat4f = na::Matrix4<f32>;
 
 struct UniformBuffer {
     buffer: wgpu::Buffer,
@@ -174,9 +174,9 @@ impl CameraController {
             DeviceEvent::MouseMotion { delta: (dx, dy) } => {
                 if self.is_mouse_pressed {
                     // println!("move {}, {}", dx, dy);
-                    self.phi -= Self::SENS_X * dx;
+                    self.phi -= 1.5 * Self::SENS_X * dx;
                     self.phi %= 2.0 * Self::PI;
-                    self.theta -= Self::SENS_Y * dy;
+                    self.theta -= 1.5 * Self::SENS_Y * dy;
                     self.theta = self.theta.clamp(0.0, Self::PI);
 
                     return true;
@@ -227,7 +227,6 @@ impl CameraController {
         );
 
         let mut look_x = Vec3f::new(-self.phi.sin() as f32, self.phi.cos() as f32, 0.0);
-        // let mut look_x = look_z.cross(&look_y).normalize();
         // println!("look_x: {}", look_x);
         // println!("look_y: {}", look_y);
         // println!("look_z: {}", look_z);
@@ -261,9 +260,9 @@ impl AppState {
         Self {
             camera: CameraController::new(),
             aspect_ratio: 1.0,
-            n: 5,
-            l: 3,
-            m: 2,
+            n: 4,
+            l: 2,
+            m: 1,
             // Matches 0.25/nm^3 from Griffiths page 153
             surf_limit: 3.7e-05,
             enable_cuts: false,
@@ -339,6 +338,10 @@ impl AppState {
                         self.enable_cuts = !self.enable_cuts;
                         changed = true;
                     }
+                    K::R => {
+                        self.real_orbital = !self.real_orbital;
+                        changed = true;
+                    }
                     _ => {}
                 }
             }
@@ -384,7 +387,7 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         .request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("the_device"),
-                features: wgpu::Features::TIMESTAMP_QUERY,
+                features: wgpu::Features::empty(),
                 // WebGL doesn't support all of wgpu's features, so if
                 // we're building for the web we'll have to disable some.
                 limits: wgpu::Limits::downlevel_webgl2_defaults(), //
@@ -458,11 +461,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
             multiview: None,
         });
     };
-
-    // TODO: Build shaders on-demand
-//     for params in builder.all_params() {
-//         println!("Built: {:?}", params);
-//     }
 
     let mut config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
