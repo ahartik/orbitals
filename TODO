@@ -1,9 +1,8 @@
-- "Ubershaders"
-- Wave functions for N > 4
+- Cleaner lib for generating wave function (done partly)
+  - Integrate with mathtool lib
+  - Automatic differentiation
+- Grid or axis thing
 - Analytical normals
-- Automatic differentiation
-- Integrate with mathtool lib
 - Benchmark
-- "real" orbitals
 - Optimize MORE
 - Web support and UI

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 use bytemuck::{Pod, Zeroable};
 
@@ -10,6 +11,9 @@ use winit::{
 };
 
 extern crate nalgebra as na;
+
+mod build_shader;
+use build_shader::{ShaderBuilder, ShaderParams};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
@@ -46,7 +50,6 @@ const QUAD_VERTICES: [Vertex; 6] = [
     vertex(-1.0, -1.0),
 ];
 
-
 // This must have the same bit layout as the Uniforms struct in the shader.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
@@ -56,22 +59,16 @@ struct Uniforms {
     // Same here
     look_matrix: [[f32; 4]; 3],
 
-    quantum_nums: [f32; 4],
-    //
-    rfun_coeffs: [f32; 4],
-    yfun_coeffs: [f32; 4],
-    rand: u32,
     surf_limit: f32,
-    enable_cuts: u32,
-    end_padding: [u32; 1],
+    padding: [u32; 3],
 }
 
 type Vec3f = na::Vector3<f32>;
 type Vec3d = na::Vector3<f64>;
 type Mat3f = na::Matrix3<f32>;
 
-type Vec4f = na::Vector4<f32>;
-type Mat4f = na::Matrix4<f32>;
+// type Vec4f = na::Vector4<f32>;
+// type Mat4f = na::Matrix4<f32>;
 
 struct UniformBuffer {
     buffer: wgpu::Buffer,
@@ -177,23 +174,23 @@ impl CameraController {
             DeviceEvent::MouseMotion { delta: (dx, dy) } => {
                 if self.is_mouse_pressed {
                     // println!("move {}, {}", dx, dy);
-                    self.phi -= Self::SENS_X * dx;
+                    self.phi -= 1.5 * Self::SENS_X * dx;
                     self.phi %= 2.0 * Self::PI;
-                    self.theta -= Self::SENS_Y * dy;
+                    self.theta -= 1.5 * Self::SENS_Y * dy;
                     self.theta = self.theta.clamp(0.0, Self::PI);
 
                     return true;
                 } else {
                     return false;
                 }
-            },
+            }
             DeviceEvent::Button { button, state } => {
                 // println!("button: {}", button);
                 self.is_mouse_pressed = *state == winit::event::ElementState::Pressed;
                 return false;
-            },
-            DeviceEvent::MouseWheel{
-                delta: winit::event::MouseScrollDelta::LineDelta(_x, y)
+            }
+            DeviceEvent::MouseWheel {
+                delta: winit::event::MouseScrollDelta::LineDelta(_x, y),
             } => {
                 println!("scroll {}", y);
                 if *y > 0.0 {
@@ -230,7 +227,6 @@ impl CameraController {
         );
 
         let mut look_x = Vec3f::new(-self.phi.sin() as f32, self.phi.cos() as f32, 0.0);
-        // let mut look_x = look_z.cross(&look_y).normalize();
         // println!("look_x: {}", look_x);
         // println!("look_y: {}", look_y);
         // println!("look_z: {}", look_z);
@@ -244,144 +240,8 @@ impl CameraController {
     }
 }
 
-#[derive(Clone, Debug)]
-struct Polynomial {
-    coeffs: Vec<f64>,
-}
-
-impl Polynomial {
-    fn from_coeffs(mut coeffs: Vec<f64>) -> Self {
-        while let Some(x) = coeffs.last() {
-            if *x == 0.0 {
-                coeffs.pop();
-            } else {
-                break;
-            }
-        }
-        if coeffs.is_empty() {
-            coeffs.push(0.0);
-        }
-        Self { coeffs }
-    }
-
-    fn single_term(scale: f64, n: usize) -> Self {
-        let mut c = vec![];
-        c.resize(n + 1, 0.0);
-        c[n] = scale;
-        return Self::from_coeffs(c);
-    }
-
-    fn mul(&self, o: &Polynomial) -> Self {
-        let mut coeffs = vec![];
-        coeffs.resize(1 + (self.coeffs.len() - 1) + (o.coeffs.len() - 1), 0.0);
-        for i in 0..self.coeffs.len() {
-            for j in 0..o.coeffs.len() {
-                coeffs[i + j] += self.coeffs[i] * o.coeffs[j];
-            }
-        }
-        return Self { coeffs };
-    }
-
-    fn add(&self, o: &Polynomial) -> Self {
-        let mut coeffs = vec![];
-        coeffs.resize(self.coeffs.len().max(o.coeffs.len()), 0.0);
-        for i in 0..self.coeffs.len() {
-            coeffs[i] += self.coeffs[i];
-        }
-        for i in 0..o.coeffs.len() {
-            coeffs[i] += o.coeffs[i];
-        }
-        return Self { coeffs };
-    }
-
-    fn sub(&self, o: &Polynomial) -> Self {
-        let mut coeffs = vec![];
-        coeffs.resize(self.coeffs.len().max(o.coeffs.len()), 0.0);
-        for i in 0..self.coeffs.len() {
-            coeffs[i] += self.coeffs[i];
-        }
-        for i in 0..o.coeffs.len() {
-            coeffs[i] -= o.coeffs[i];
-        }
-        return Self { coeffs };
-    }
-
-    fn scale_inplace(&mut self, a: f64) {
-        for i in 0..self.coeffs.len() {
-            self.coeffs[i] *= a;
-        }
-    }
-
-    fn diff_inplace(&mut self) {
-        for i in 1..self.coeffs.len() {
-            self.coeffs[i - 1] = (i as f64) * self.coeffs[i];
-        }
-        self.coeffs.pop();
-        if self.coeffs.is_empty() {
-            self.coeffs.push(0.0);
-        }
-    }
-}
-
-fn gen_legendre(maxn: usize) -> Vec<Polynomial> {
-    // (x^2-1)^n
-    let mut base: Vec<Polynomial> = vec![];
-    let mut last = Polynomial::from_coeffs(vec![1.0]);
-    let x2 = Polynomial::from_coeffs(vec![-1.0, 0.0, 1.0]);
-
-    base.push(last.clone());
-
-    for _ in 1..(maxn + 1) {
-        last = last.mul(&x2);
-        base.push(last.clone());
-    }
-
-    let mut res: Vec<Polynomial> = vec![];
-    res.push(Polynomial::from_coeffs(vec![1.0]));
-    for n in 1..(maxn + 1) {
-        // P_n = (1/(2^n * n!))(d/dx)^n (x^2-1)^n
-        let mut p = base[n].clone(); // (x^2-1)^n
-        for k in 1..(n + 1) {
-            p.diff_inplace();
-            p.scale_inplace(1.0 / (2.0 * (k as f64)));
-        }
-        res.push(p);
-    }
-    return res;
-}
-
-fn factorial(n: usize) -> f64 {
-    if n == 0 {
-        return 1.0;
-    }
-    return (n as f64) * factorial(n - 1);
-}
-
-fn gen_laguerre(maxn: usize) -> Vec<Polynomial> {
-    let mut res: Vec<Polynomial> = vec![];
-    let mut b = Polynomial::from_coeffs(vec![1.0]);
-    for n in 0..(maxn + 1) {
-        let mut z = b.clone();
-        //println!("z: {:?}", z);
-        for _ in 0..n {
-            let mut w = z.clone();
-            w.diff_inplace();
-            //println!("w: {:?}", w);
-            z = w.sub(&z);
-            //println!("z: {:?}", z);
-        }
-        //println!("z2: {:?}", z);
-        z.scale_inplace(1.0 / factorial(n));
-        res.push(z);
-        // b = x**(n+1) for next iter
-        *b.coeffs.last_mut().unwrap() = 0.0;
-        b.coeffs.push(1.0);
-    }
-    return res;
-}
-
 // Largest supported value of N
-const MAX_N: i32 = 4;
+const MAX_N: usize = 8;
 
 //
 struct AppState {
@@ -392,8 +252,7 @@ struct AppState {
     m: i32,
     surf_limit: f64,
     enable_cuts: bool,
-    legendre: Vec<Polynomial>,
-    laguerre: Vec<Polynomial>,
+    real_orbital: bool,
 }
 
 impl AppState {
@@ -403,12 +262,11 @@ impl AppState {
             aspect_ratio: 1.0,
             n: 4,
             l: 2,
-            m: 0,
+            m: 1,
             // Matches 0.25/nm^3 from Griffiths page 153
             surf_limit: 3.7e-05,
             enable_cuts: false,
-            legendre: gen_legendre(MAX_N as usize),
-            laguerre: gen_laguerre((2 * MAX_N) as usize),
+            real_orbital: true,
         }
     }
 
@@ -416,23 +274,14 @@ impl AppState {
         self.aspect_ratio = (w as f32) / (h as f32);
     }
 
-    fn assoc_laguerre(&self, q: i32, p: i32) -> Polynomial {
-        let mut poly = self.laguerre[(q + p) as usize].clone();
-        for _ in 0..p {
-            poly.diff_inplace();
-        }
-        poly.scale_inplace((-1.0 as f64).powi(p));
-        return poly;
-    }
-
-    fn assoc_legendre(&self, l: i32, m: i32) -> Polynomial {
-        assert!(m >= 0);
-        let mut poly = self.legendre[l as usize].clone();
-        for _ in 0..m {
-            poly.diff_inplace();
-        }
-        poly.scale_inplace((-1.0 as f64).powi(m));
-        return poly;
+    fn shader_params(&self) -> ShaderParams {
+        return ShaderParams{
+            n: self.n,
+            l: self.l,
+            m: self.m,
+            cut_half: self.enable_cuts,
+            real_orbital: self.real_orbital,
+        };
     }
 
     fn uniforms(&self) -> Uniforms {
@@ -443,55 +292,11 @@ impl AppState {
                 look_mat_array[i][j] = look_mat[(i, j)];
             }
         }
-
-        // Coefficients for R(r):
-        let rmul = f64::sqrt(
-            (2.0 / (self.n as f64)).powi(3) * factorial((self.n - self.l - 1) as usize)
-                / (2.0 * (self.n as f64) * factorial((self.n + self.l) as usize)),
-        );
-        let p = 2 * self.l + 1;
-        let q = self.n - self.l - 1;
-        let mut rfun = self.assoc_laguerre(q, p);
-        for i in 0..rfun.coeffs.len() {
-            rfun.coeffs[i] *= (2.0 / (self.n as f64)).powi(i as i32);
-        }
-        // println!("L_{}^{} {:?}", q, p, rfun);
-        rfun.scale_inplace(rmul);
-
-        rfun = rfun.mul(&Polynomial::single_term(
-            (2.0 / (self.n as f64)).powi(self.l),
-            self.l as usize,
-        ));
-
-        let mut rfun_coeffs: [f32; 4] = [0.0; 4];
-        assert!(rfun.coeffs.len() <= 4);
-        for i in 0..rfun.coeffs.len() {
-            rfun_coeffs[i] = rfun.coeffs[i] as f32;
-        }
-
-        // Coefficients for Y(theta, phi):
-        let mut yfun = self.assoc_legendre(self.l, self.m.abs());
-        yfun.scale_inplace(f64::sqrt(
-            ((2 * self.l + 1) as f64 / (4.0 * std::f64::consts::PI))
-                * (factorial((self.l - self.m) as usize) / factorial((self.l + self.m) as usize)),
-        ));
-        let mut yfun_coeffs: [f32; 4] = [0.0; 4];
-        assert!(yfun.coeffs.len() <= 4);
-        for i in 0..yfun.coeffs.len() {
-            yfun_coeffs[i] = yfun.coeffs[i] as f32;
-        }
-        println!("rfun: {:?}", rfun);
-        println!("yfun: {:?}", yfun);
         return Uniforms {
             camera_pos: *self.camera.camera_pos().push(0.0).as_ref(),
             look_matrix: look_mat_array,
-            quantum_nums: [self.n as f32, self.l as f32, self.m as f32, 0.0],
-            rfun_coeffs,
-            yfun_coeffs,
-            rand: rand::random::<u32>(),
             surf_limit: self.surf_limit as f32,
-            enable_cuts: self.enable_cuts as u32,
-            end_padding: [0],
+            padding: [0; 3],
         };
     }
 
@@ -502,45 +307,48 @@ impl AppState {
 
         let mut changed = false;
         match event {
-            DeviceEvent::Key(
-                winit::event::KeyboardInput {
-                    virtual_keycode: Some(code),
-                    state: winit::event::ElementState::Pressed,
-                    ..
-                }) => {
+            DeviceEvent::Key(winit::event::KeyboardInput {
+                virtual_keycode: Some(code),
+                state: winit::event::ElementState::Pressed,
+                ..
+            }) => {
                 type K = winit::event::VirtualKeyCode;
                 match code {
                     K::N => {
                         self.n += 1;
                         changed = true;
-                    },
+                    }
                     K::L => {
                         self.l += 1;
                         changed = true;
-                    },
+                    }
                     K::M => {
                         self.m += 1;
                         changed = true;
-                    },
+                    }
                     K::Equals | K::Plus => {
-                        self.surf_limit /= 1.25;
+                        self.surf_limit /= 1.125;
                         changed = true;
-                    },
+                    }
                     K::Minus => {
-                        self.surf_limit *= 1.25;
+                        self.surf_limit *= 1.125;
                         changed = true;
-                    },
+                    }
                     K::C => {
                         self.enable_cuts = !self.enable_cuts;
                         changed = true;
-                    },
+                    }
+                    K::R => {
+                        self.real_orbital = !self.real_orbital;
+                        changed = true;
+                    }
                     _ => {}
                 }
-            },
+            }
             _ => {}
         }
         if changed {
-            if self.n > MAX_N {
+            if self.n > MAX_N as i32 {
                 self.n = 1;
             }
             if self.l >= self.n {
@@ -550,7 +358,10 @@ impl AppState {
                 self.m = 0;
             }
             println!("N={} L={} M={}", self.n, self.l, self.m);
-            println!("surf_limit={} enable_cuts={}", self.surf_limit, self.enable_cuts);
+            println!(
+                "surf_limit={} enable_cuts={}",
+                self.surf_limit, self.enable_cuts
+            );
             return true;
         }
         return false;
@@ -576,26 +387,20 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         .request_device(
             &wgpu::DeviceDescriptor {
                 label: Some("the_device"),
-                features: wgpu::Features::TIMESTAMP_QUERY,
+                features: wgpu::Features::empty(),
                 // WebGL doesn't support all of wgpu's features, so if
                 // we're building for the web we'll have to disable some.
-                limits: wgpu::Limits::downlevel_webgl2_defaults()
-                // limits: if cfg!(target_arch = "wasm32") {
-                //     wgpu::Limits::downlevel_webgl2_defaults()
-                // } else {
-                //     wgpu::Limits::default()
-                // },
+                limits: wgpu::Limits::downlevel_webgl2_defaults(), //
+                                                                   // limits: if cfg!(target_arch = "wasm32") {
+                                                                   //     wgpu::Limits::downlevel_webgl2_defaults()
+                                                                   // } else {
+                                                                   //     wgpu::Limits::default()
+                                                                   // },
             },
             None,
         )
         .await
         .expect("Failed to create device");
-
-    // Load the shaders from disk
-    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("Shader"),
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
-    });
 
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("Vertex Buffer"),
@@ -614,37 +419,48 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
     });
 
     let swapchain_format = surface.get_supported_formats(&adapter)[0];
-    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("Render pipeline"),
-        layout: Some(&pipeline_layout),
-        vertex: wgpu::VertexState {
-            module: &shader,
-            entry_point: "vs_main",
-            buffers: &[Vertex::desc()],
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &shader,
-            entry_point: "fs_main",
-            targets: &[Some(swapchain_format.into())],
-        }),
-        // primitive: wgpu::PrimitiveState::default(),
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            strip_index_format: None,
-            front_face: wgpu::FrontFace::Ccw,
-            cull_mode: Some(wgpu::Face::Back),
-            // Setting this to anything other than Fill requires Features::POLYGON_MODE_LINE
-            // or Features::POLYGON_MODE_POINT
-            polygon_mode: wgpu::PolygonMode::Fill,
-            // Requires Features::DEPTH_CLIP_CONTROL
-            unclipped_depth: false,
-            // Requires Features::CONSERVATIVE_RASTERIZATION
-            conservative: false,
-        },
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        multiview: None,
-    });
+    let mut pipelines = HashMap::<ShaderParams, wgpu::RenderPipeline>::new();
+    let builder = ShaderBuilder::new(MAX_N);
+
+    let build_pipeline = move |device: &wgpu::Device, params: &ShaderParams| -> wgpu::RenderPipeline {
+        let shader_src: String = builder.build(&params);
+        // Load the shaders from disk
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("OrbitalShader"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(shader_src.as_str())),
+        });
+        return device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: "vs_main",
+                buffers: &[Vertex::desc()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: "fs_main",
+                targets: &[Some(swapchain_format.into())],
+            }),
+            // primitive: wgpu::PrimitiveState::default(),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                // Setting this to anything other than Fill requires Features::POLYGON_MODE_LINE
+                // or Features::POLYGON_MODE_POINT
+                polygon_mode: wgpu::PolygonMode::Fill,
+                // Requires Features::DEPTH_CLIP_CONTROL
+                unclipped_depth: false,
+                // Requires Features::CONSERVATIVE_RASTERIZATION
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+        });
+    };
 
     let mut config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -655,13 +471,6 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         alpha_mode: surface.get_supported_alpha_modes(&adapter)[0],
     };
 
-    let ts_queryset = device.create_query_set(
-        &wgpu::QuerySetDescriptor {
-            label: Some("ts_query"),
-            ty: wgpu_types::QueryType::Timestamp,
-            count: 2,
-        });
-
     let mut app = AppState::new();
     app.update_size(size.width, size.height);
     surface.configure(&device, &config);
@@ -670,7 +479,8 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
         // Have the closure take ownership of the resources.
         // `event_loop.run` never returns, therefore we must do this to ensure
         // the resources are properly cleaned up.
-        let _ = (&instance, &adapter, &shader, &pipeline_layout);
+        // let _ = (&instance, &adapter, &pipeline_layout);
+        let _ = (&instance, &adapter);
 
         *control_flow = ControlFlow::Wait;
         match event {
@@ -703,12 +513,20 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                 let view = frame
                     .texture
                     .create_view(&wgpu::TextureViewDescriptor::default());
+
+                use std::collections::hash_map::Entry;
+                let sp = app.shader_params();
+                let pipeline_entry = pipelines.entry(sp);
+                let pipeline : &wgpu::RenderPipeline = match pipeline_entry {
+                    Entry::Occupied(e) => e.into_mut(),
+                    Entry::Vacant(e) => e.insert(build_pipeline(&device, &sp)),
+                };
+
                 let uniforms = app.uniforms();
                 uniform_buffer.queue_update(&queue, &uniforms);
 
                 let mut encoder =
                     device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-                encoder.write_timestamp(&ts_queryset, 0);
                 {
                     let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: None,
@@ -722,12 +540,11 @@ async fn run(event_loop: EventLoop<()>, window: Window) {
                         })],
                         depth_stencil_attachment: None,
                     });
-                    rpass.set_pipeline(&render_pipeline);
+                    rpass.set_pipeline(pipeline);
                     rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
                     rpass.set_bind_group(0, &uniform_buffer.bind_group, &[]);
                     rpass.draw(0..(QUAD_VERTICES.len() as u32), 0..1);
                 }
-                encoder.write_timestamp(&ts_queryset, 1);
 
                 queue.submit(Some(encoder.finish()));
                 frame.present();
@@ -759,15 +576,6 @@ fn main() {
     let window = winit::window::Window::new(&event_loop).unwrap();
 
     // window.set_cursor_grab(winit::window::CursorGrabMode::Confined).unwrap();
-
-    let legendre = gen_legendre(5);
-    for x in legendre {
-        println!("Legendre: {:?}", x);
-    }
-    let lag = gen_laguerre(5);
-    for x in lag {
-        println!("Laguerre: {:?}", x);
-    }
 
     #[cfg(not(target_arch = "wasm32"))]
     {
