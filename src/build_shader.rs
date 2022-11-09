@@ -154,12 +154,20 @@ impl ShaderBuilder {
             }
             if params.real_orbital && m != 0 {
                 writeln!(wave, "let phiz = vec2(pos.x, pos.y) / xylen;").unwrap();
-                writeln!(wave, "var z = phiz;").unwrap();
-                // TODO: This can be made logarithmic in m if more optimization is desired.
-                for _ in 1..m {
-                    writeln!(wave, "z = complex_mul(z, phiz);").unwrap();
+                writeln!(wave, "let z0 = phiz;").unwrap();
+                let mut i = 1usize;
+                while (1 << i) <= m {
+                    writeln!(wave, "let z{} = complex_mul(z{}, z{});", i, i-1, i-1).unwrap();
+                    i += 1;
                 }
-                writeln!(wave, "yfun *= z.x;").unwrap();
+
+                writeln!(wave, "var zf = vec2(1.0, 0.0);").unwrap();
+                for j in 0..i {
+                    if ((1 << j) & m) != 0 {
+                        writeln!(wave, "zf = complex_mul(zf, z{});",j ).unwrap();
+                    }
+                }
+                writeln!(wave, "yfun *= zf.x;").unwrap();
                 /*
                 writeln!(wave, "let cosphi = pos.x / xylen;").unwrap();
                 writeln!(wave, "let sinphi = pos.y / xylen;").unwrap();
@@ -181,9 +189,10 @@ impl ShaderBuilder {
         }
 
         writeln!(wave, "return (yfun * rfun);").unwrap();
-        if m == 0 && l == 6 {
             println!("{}", wave);
-        }
+        // if m == 5 && l == 6 {
+        //     println!("{}", wave);
+        // }
 
         ctx.define("WAVE_FUNC", wave);
         return minipre::process_str(TEMPLATE, &mut ctx).unwrap();
