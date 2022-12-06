@@ -189,7 +189,7 @@ impl ShaderBuilder {
         }
 
         writeln!(wave, "return (yfun * rfun);").unwrap();
-            println!("{}", wave);
+        println!("{}", wave);
         // if m == 5 && l == 6 {
         //     println!("{}", wave);
         // }

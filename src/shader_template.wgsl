@@ -243,7 +243,7 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
         }
       }
 
-      let n = normal(pos, dpos, h);
+      let n = normal(pos, 0.5 * dpos, h);
       return lighting(pos, n, light_pos);
     }
 
