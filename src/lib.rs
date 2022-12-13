@@ -457,6 +457,9 @@ pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
         push_constant_ranges: &[],
     });
 
+    // RENDER TO TEXTURE
+    
+
     let swapchain_format = surface.get_supported_formats(&adapter)[0];
     let mut pipelines = HashMap::<ShaderParams, wgpu::RenderPipeline>::new();
     let builder = ShaderBuilder::new(MAX_N);

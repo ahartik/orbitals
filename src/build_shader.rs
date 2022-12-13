@@ -149,8 +149,8 @@ impl ShaderBuilder {
                 .unwrap();
                 writeln!(wave, "yfun += dot(cospows{}, ycoeff{});", i, i).unwrap();
             }
-            for _ in 0..m {
-                writeln!(wave, "yfun *= sintheta;").unwrap();
+            if m != 0 {
+                writeln!(wave, "yfun *= pow(sintheta, {:.1});", m as f64).unwrap();
             }
             if params.real_orbital && m != 0 {
                 writeln!(wave, "let phiz = vec2(pos.x, pos.y) / xylen;").unwrap();
@@ -168,23 +168,6 @@ impl ShaderBuilder {
                     }
                 }
                 writeln!(wave, "yfun *= zf.x;").unwrap();
-                /*
-                writeln!(wave, "let cosphi = pos.x / xylen;").unwrap();
-                writeln!(wave, "let sinphi = pos.y / xylen;").unwrap();
-                writeln!(wave, "var cosa = cosphi;").unwrap();
-                writeln!(wave, "var sina = sinphi;").unwrap();
-                writeln!(wave, "var tmp = 0.0;").unwrap();
-                for _ in 1..m {
-                    writeln!(wave, "tmp = cosa * cosphi - sina * sinphi;").unwrap();
-                    writeln!(wave, "sina = sina * cosphi + cosa * sinphi;").unwrap();
-                    writeln!(wave, "cosa = tmp;").unwrap();
-                }
-                writeln!(wave, "yfun *= cosa;").unwrap();
-                */
-                /*
-                writeln!(wave, "let phi = atan2(pos.y, pos.x);").unwrap();
-                writeln!(wave, "yfun *= cos({:.1} * phi);", m as f64).unwrap();
-                */
             }
         }
 

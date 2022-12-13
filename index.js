@@ -20,11 +20,12 @@ init().then(() => {
     console.log(app.get_m());
 
     // Logarithmic / exponential 
-    let surf_min = 0.001;
-    let surf_center = 0.25;
+    let surf_min = 0.0001;
+    let surf_default = 0.25;
+    let surf_range_default = 0.8;
     // min * exp(B * 1.0) = center
     // B = ln(center / min)
-    let surf_B = Math.log(surf_center / surf_min);
+    let surf_B = Math.log(surf_default / surf_min);
 
     function sanitize() {
       qn.value = app.get_n()
@@ -33,11 +34,10 @@ init().then(() => {
 
       let s = app.get_surf_limit();
       surf_number.value = s;
-      surf_range.value = s;
       // min * exp(B * x) = s 
       // B * x = log(s / min)
       // x = log(s/min) / B
-      surf_range.value = Math.log(s/ surf_min) / surf_B;
+      surf_range.value = (Math.log(s/ surf_min) / surf_B) * surf_range_default;
     }
 
     qn.addEventListener('change', (event) => {
@@ -55,7 +55,7 @@ init().then(() => {
 
     surf_range.addEventListener('input', (event) => {
       let x = event.target.value;
-      let val = surf_min * Math.exp(surf_B * x);
+      let val = surf_min * Math.exp(surf_B * x / surf_range_default);
       app.set_surf_limit(val);
       sanitize();
     });
@@ -93,22 +93,28 @@ init().then(() => {
     // Fix canvas:
     let canvas = document.getElementById("wasm-canvas");
 
+    // XXX
+    let lowres = document.getElementById("lowres");
+
     function resizeCanvas() {
       console.log("resize:");
       let w = window.innerWidth;
       let h = window.innerHeight;
       console.log(w);
       console.log(h);
-      let scale = lowres.checked ? 0.5 : 1.0;
-      app.set_size(scale * w, scale * h);
+      if (lowres.checked) {
+        app.set_size(w/2, h/2);
+      } else {
+        app.set_size(w, h);
+      }
       canvas.removeAttribute("style");
     }
 
-    let lowres = document.getElementById("lowres");
     lowres.addEventListener('change', (event) => {
       resizeCanvas();
     });
 
+    canvas.removeAttribute("style");
     window.addEventListener('resize', resizeCanvas, false);
     // Draw canvas border for the first time.
     resizeCanvas();

@@ -193,6 +193,7 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
   var last = 0.0;
   var last_pos = pos;
 
+
 #if CUT_HALF
   if (pos.y < 0.0) {
     if (dpos.y < 0.0) {

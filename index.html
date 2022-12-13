@@ -1,7 +1,5 @@
-nput
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -26,16 +24,18 @@ nput
         #full {
           width: 100%;
           display: flex;
-          flex-flow: column;
         }
         #inputs {
-          color: black;
-          background-color: rgba(255, 255, 255, .3);
-          border: 2px;
+          color: white;
+          background-color: rgba(0, 0, 0, .3);
           margin: 5px;
           padding: 10px;
-          flex: 0 1 auto;
           z-index: 1;
+          border-radius: 10px;
+          border: 2px solid #000;
+          display: flex;
+          flex-flow: row;
+          width:100%;
         }
         #wasm-canvas-div {
           width: 100%;
@@ -57,38 +57,88 @@ nput
              height: 400px;
            */
         }
+        .flexrow {
+          display: flex;
+          flex-flow: row;
+          align-items: center;
+        }
+        #surf_limit {
+          flex: 1;
+          width:100%;
+        }
         #surf_range {
-          width: 400px;
+          flex: 10;
+        }
+        #surf_number{
+          flex: 0;
+          max-width:100px;
+        }
+        #quantum_numbers {
+        }
+        #orbital_type {
+          flex: 0;
+        }
+        .qnum {
+          width: 100px;
+          margin:auto;
+        }
+        #cut-div {
+          flex: 0;
+        }
+        .pad {
+          margin:0px auto;
+        }
+        .nowrap {
+          white-space: nowrap;
+        }
+        fieldset {
+        }
+        canvas {
+          width: 100% !important;
+          height: 100% !important;
         }
     </style>
     <script type="module" src="index.js">
     </script>
 </head>
-
 <body>
-  <div id="wasm-canvas-div"></div>
+  <div id="wasm-canvas-div">
+  </div>
   <div id="full"> 
     <div id="inputs">
-        <label for="qn">N:</label>
-        <input type="number" id="qn" name="qn" min="1" max="8" value="1">
-        <label for="ql">L:</label>
-        <input type="number" id="ql" name="ql" min="0" max="8" value="1">
-        <label for="qm">M:</label>
-        <input type="number" id="qm" name="qm" min="0" max="8" value="1">
-        <br>
-        <label for="surf_number">Surface limit:</label>
-        <input type="range" id="surf_range" name="surf_range" min="0.0" max="2.0" value="1.0" step="0.01">
-        <input type="number" id="surf_number" name="surf_number" min="0.01" max="0.5" value="0.25" step="0.01">
-        1/nm^3
-        <br>
-        <label for="cut">Hide y&lt;0</label>
-        <input type="checkbox" id="cut" name="cut">
-        <label for="complex">Complex orbital</label>
+      <fieldset id="quantum_numbers" class="flexrow">
+        <legend>
+          Quantum numbers
+        </legend>
+          <label for="qn">N:</label>
+          <input type="number" id="qn" class="qnum" name="qn" min="1" max="8" value="1">
+          <label for="ql">L:</label>
+          <input type="number" id="ql" class="qnum" name="ql" min="0" max="8" value="1">
+          <label for="qm">M:</label>
+          <input type="number" id="qm" class="qnum" name="qm" min="0" max="8" value="1">
+      </fieldset>
+      <fieldset id="surf_limit" class="flexrow">
+          <legend>Surface limit</legend>
+          <input type="range" id="surf_range" name="surf_range" min="0.0" max="1.0" value="0.8" step="0.01">
+          <input type="number" id="surf_number" name="surf_number" min="0.01" max="0.5" value="0.25" step="0.01">
+          1/nm^3
+      </fieldset>
+      <fieldset id="orbital_type">
+        <legend>Wavefunction</legend>
         <input type="radio" id="complex" name="orbital_type" value="complex">
-        <label for="real">Real orbital</label>
+        <label for="complex">complex</label>
         <input type="radio" id="real" name="orbital_type" value="real">
-        <label for="lowres">Low res</label>
-        <input type="checkbox" id="lowres" name="lowres" checked>
+        <label for="real">real</label>
+      </fieldset>
+        <!--
+        -->
+      <div id="cut-div" class="flexrow">
+        <div class="nowrap">
+          <input type="checkbox" id="cut" name="cut"><label for="cut" >Hide&nbsp;y&lt;0</label>
+          <br>
+        <input type="checkbox" id="lowres" name="lowres" checked><label for="lowres">Low&nbsp;res</label>
+        </div>
+      </div>
     </div>
   </div>
 </body>
