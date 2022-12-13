@@ -1,8 +1,4 @@
-- Cleaner lib for generating wave function (done partly)
-  - Integrate with mathtool lib
-  - Automatic differentiation
 - Grid or axis thing
 - Analytical normals
 - Benchmark
 - Optimize MORE
-- Web support and UI

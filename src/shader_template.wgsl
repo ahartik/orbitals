@@ -43,6 +43,7 @@ let M : i32 = VAL_M;
 // - RFUNC
 // - PHI_SYMMETRIC
 
+// This is called from generated code.
 fn complex_mul(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
   return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
 }
@@ -57,6 +58,7 @@ fn hydrogen_wave(pos: vec3<f32>) -> f32 {
   let cosphi : f32 = pos.x / xylen;
   let sinphi : f32 = pos.y / xylen;
 
+  // Put generated code here 
   WAVE_FUNC
 }
 
@@ -158,11 +160,11 @@ fn lighting(pos: vec3<f32>, normal: vec3<f32>, light_pos: vec3<f32>) -> vec4<f32
   let base_color = pos_color(pos);
 
   var color = vec3(0.0, 0.0, 0.0);
-  color += 0.2 * base_color;
+  color += 0.1 * base_color;
 
   let to_light = normalize(light_pos - pos);
   // Diffuse lighting
-  color += max(0.0, 0.8 * dot(normal, to_light)) * base_color;
+  color += max(0.0, 0.9 * dot(normal, to_light)) * base_color;
 
   return vec4(color, 1.0);
 }
@@ -174,7 +176,8 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
 
   // var light_pos = vec3(normalize(vec2(pos.x, pos.y)) * 100.0 , 100.0);
   // var light_pos = vec3(0.0, -100.0, 100.0);
-  var light_pos = pos + uniforms.look_matrix * vec3(0.0, 100.0, 0.0);
+  // var light_pos = pos + uniforms.look_matrix * vec3(0.0, 100.0, 0.0);
+  var light_pos = uniforms.look_matrix * vec3(0.0, 1000.0, -500.0);
 
   var v = vec3(vertex.pos.x, vertex.pos.y, 1.0);
   var ray = normalize(uniforms.look_matrix * v);
@@ -253,6 +256,6 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
     last_pos = pos;
     pos += dpos;
   }
-  prob *= 100.0;
+  prob *= 200.0;
   return vec4(prob, prob, prob, 1.0);
 }

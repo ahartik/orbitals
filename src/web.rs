@@ -73,6 +73,10 @@ impl WebApp {
         self.params.real_orbital = r;
         self.loop_proxy.send_event(WebUIEvent::ChangeParams(self.params));
     }
+
+    pub fn set_size(&mut self, w: i32, h: i32) {
+        self.loop_proxy.send_event(WebUIEvent::ChangeSize(w, h));
+    }
 }
 
 
@@ -89,16 +93,19 @@ pub fn web_start_app() -> WebApp {
     info!("web_start_app");
     let event_loop = EventLoopBuilder::<WebUIEvent>::with_user_event().build();
     let window = winit::window::Window::new(&event_loop).unwrap();
+    window.set_inner_size(winit::dpi::PhysicalSize::new(400, 400));
+    // window.set_outer_size(winit::dpi::LogicalSize(800, 800));
     use winit::platform::web::WindowExtWebSys;
 
     let app = WebApp::new(&event_loop);
 
     // Add window to canvas in document body.
     let win_canvas = window.canvas();
+    win_canvas.set_id("wasm-canvas");
     web_sys::window()
         .and_then(|win| win.document())
         .and_then(|doc| {
-            let dst = doc.get_element_by_id("wasm-canvas")?;
+            let dst = doc.get_element_by_id("wasm-canvas-div")?;
             let canvas = web_sys::Element::from(win_canvas);
             dst.append_child(&canvas).ok()?;
             Some(())

@@ -53,7 +53,7 @@ init().then(() => {
       sanitize();
     });
 
-    surf_range.addEventListener('change', (event) => {
+    surf_range.addEventListener('input', (event) => {
       let x = event.target.value;
       let val = surf_min * Math.exp(surf_B * x);
       app.set_surf_limit(val);
@@ -88,5 +88,29 @@ init().then(() => {
       let val = event.target.checked;
       app.set_real(!val);
     });
+
+
+    // Fix canvas:
+    let canvas = document.getElementById("wasm-canvas");
+
+    function resizeCanvas() {
+      console.log("resize:");
+      let w = window.innerWidth;
+      let h = window.innerHeight;
+      console.log(w);
+      console.log(h);
+      let scale = lowres.checked ? 0.5 : 1.0;
+      app.set_size(scale * w, scale * h);
+      canvas.removeAttribute("style");
+    }
+
+    let lowres = document.getElementById("lowres");
+    lowres.addEventListener('change', (event) => {
+      resizeCanvas();
+    });
+
+    window.addEventListener('resize', resizeCanvas, false);
+    // Draw canvas border for the first time.
+    resizeCanvas();
 });
 

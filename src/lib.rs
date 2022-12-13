@@ -224,7 +224,11 @@ impl CameraController {
             .cast::<f32>();
     }
 
+    // This matrix maps from ((-1, 1), (-1, 1), 1) to rays
+    // In "math" coordinates Z-axel goes from bottom to top, while X and Y
+    // are horizontal.
     fn look_matrix(&self, aspect_ratio: f32) -> Mat3f {
+        // Target the camera is pointing at
         let look_at = Vec3f::zeros();
         let pos = self.camera_pos();
         // This is multiplied by screen-Z (i.e. 1)
@@ -340,14 +344,8 @@ impl AppState {
         };
     }
 
-    fn process_web_event(&mut self, event: &WebUIEvent) {
-        info!("Got UI event: {:?}", event);
-
-        match event {
-            WebUIEvent::ChangeParams(params) => {
-                self.params = *params;
-            },
-        }
+    fn change_params(&mut self, params: &OrbitalParams) {
+        self.params = *params;
         info!("params: {:?}", self.params);
     }
 
@@ -410,7 +408,8 @@ impl AppState {
 
 #[derive(Copy, Clone, Debug)]
 pub enum WebUIEvent {
-    ChangeParams(OrbitalParams)
+    ChangeParams(OrbitalParams),
+    ChangeSize(i32, i32)
 }
 
 pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
@@ -436,11 +435,6 @@ pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
                 // WebGL doesn't support all of wgpu's features, so if
                 // we're building for the web we'll have to disable some.
                 limits: wgpu::Limits::downlevel_webgl2_defaults(), //
-                                                                   // limits: if cfg!(target_arch = "wasm32") {
-                                                                   //     wgpu::Limits::downlevel_webgl2_defaults()
-                                                                   // } else {
-                                                                   //     wgpu::Limits::default()
-                                                                   // },
             },
             None,
         )
@@ -552,7 +546,17 @@ pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
                 }
             }
             Event::UserEvent(ev) => {
-                app.process_web_event(&ev);
+                match ev {
+                    WebUIEvent::ChangeParams(params)
+                        => {
+                        app.change_params(&params);
+                    },
+                    WebUIEvent::ChangeSize(w,h)
+                        => {
+                        window.set_inner_size(winit::dpi::LogicalSize::new(w, h));
+
+                    },
+                }
                 window.request_redraw();
             },
             Event::RedrawRequested(_) => {
