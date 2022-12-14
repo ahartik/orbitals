@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hydrogen orbitals</title>
+    <style>
+        html,body {
+            /*
+               background-color: #444;
+               */
+          height: 100%;
+          margin: 0px;
+        }
+        canvas {
+          background-color: black;
+          /*
+           *
+           * width: 100%;
+           *
+           */
+        }
+        #full {
+          width: 100%;
+          display: flex;
+        }
+        #inputs {
+          color: white;
+          background-color: rgba(0, 0, 0, .3);
+          margin: 5px;
+          padding: 10px;
+          z-index: 1;
+          border-radius: 10px;
+          border: 2px solid #000;
+          width:100%;
+          /*
+           *  layout:
+           */
+          flex-flow: row;
+          display: flex;
+          width: 100%;
+        }
+        @media (max-width: 800px) {
+          #inputs {
+            flex-flow: column;
+          }
+        }
+        #show-hide {
+          position: absolute;
+          top: 0;
+          right: 0;
+          margin-left: auto;
+          width: fit-content;
+          color: white;
+          z-index: 2;
+        }
+        
+        #wasm-canvas-div {
+          width: 100%;
+          height: 100%;
+          position:fixed;
+          top: 0px;
+          left: 0px;
+        }
+        #filler-div {
+        }
+        #footer {
+          flex: 0 1 auto;
+        }
+        #wasm-canvas {
+          height: 100%;
+          /*
+          width: 100%;
+             width: 400px;
+             height: 400px;
+           */
+        }
+        .flexrow {
+          display: flex;
+          flex-flow: row;
+          align-items: center;
+        }
+        #surf_limit {
+          flex: 1;
+        }
+        #surf_range {
+          flex: 10;
+          min-width: 10px
+        }
+        #surf_number{
+          flex: 0;
+          max-width:75px;
+        }
+        #quantum_numbers {
+        }
+
+        .flexzero {
+          flex: 0;
+        }
+        .qnum {
+          width: 50px;
+          margin:auto;
+        }
+        #cut-div {
+          flex: 0;
+        }
+        .pad {
+          margin:0px auto;
+        }
+        .nowrap {
+          white-space: nowrap;
+        }
+        sup {
+          font-size: small;
+          vertical-align: super;
+        }
+        fieldset {
+        }
+        canvas {
+          width: 100% !important;
+          height: 100% !important;
+        }
+        [hidden]{
+            display:none !important;
+        }
+        [hidden] > * {
+            display:none;
+        }
+    </style>
+    <script type="module" src="index.js">
+    </script>
+</head>
+<body>
+  <div id="wasm-canvas-div">
+  </div>
+  <div id="full"> 
+    <div id="inputs">
+      <fieldset id="quantum_numbers" class="flexrow">
+        <legend>
+          Quantum numbers
+        </legend>
+          <label for="qn">N:</label>
+          <input type="number" id="qn" class="qnum" name="qn" min="1" max="8" value="1">
+          <label for="ql">L:</label>
+          <input type="number" id="ql" class="qnum" name="ql" min="0" max="8" value="1">
+          <label for="qm">M:</label>
+          <input type="number" id="qm" class="qnum" name="qm" min="0" max="8" value="1">
+      </fieldset>
+      <fieldset id="surf_limit" class="flexrow">
+          <legend>Surface limit</legend>
+          <input type="range" id="surf_range" name="surf_range" min="0.0" max="1.0" value="0.8" step="0.01">
+          <input type="number" id="surf_number" name="surf_number" min="0.01" max="0.5" value="0.25" step="0.01">
+          <p>nm<sup>-3</sup></p>
+      </fieldset>
+      <fieldset id="orbital_type" class="flexzero">
+        <legend>Wavefunction</legend>
+        <input type="radio" id="complex" name="orbital_type" value="complex">
+        <label for="complex">complex</label>
+        <input type="radio" id="real" name="orbital_type" value="real">
+        <label for="real">real</label>
+      </fieldset>
+      <fieldset id="resolution" class="flexzero flexrow">
+        <legend>Render scale</legend>
+        <input type="radio" id="scale1" name="scale" value="1">
+        <label for="scale1">1x</label>
+        <input type="radio" id="scale2" name="scale" value="2">
+        <label for="scale2">2x</label>
+        <input type="radio" id="scale3" name="scale" value="3">
+        <label for="scale3">3x</label>
+      </fieldset>
+        <!--
+        -->
+      <div id="cut-div" class="flexrow">
+        <div class="nowrap">
+          <input type="checkbox" id="cut" name="cut"><label for="cut" >Hide&nbsp;y&lt;0</label>
+          <br>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="show-hide">
+    <button id="show">show controls</button>
+    <button id="hide">hide controls</button>
+  </div>
+</body>
+
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "orbitals",
+  "version": "0.1.0",
+  "files": [
+    "orbitals_bg.wasm",
+    "orbitals.js",
+    "orbitals.d.ts"
+  ],
+  "module": "orbitals.js",
+  "types": "orbitals.d.ts",
+  "sideEffects": false
+}
