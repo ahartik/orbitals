@@ -180,7 +180,24 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
   var light_pos = uniforms.look_matrix * vec3(0.0, 1000.0, -500.0);
 
   var v = vec3(vertex.pos.x, vertex.pos.y, 1.0);
-  var ray = normalize(uniforms.look_matrix * v);
+  let ray = normalize(uniforms.look_matrix * v);
+
+  // Limit following to sphere of certain radius.
+  // This prevents rendering glitches when zoomed too far out.
+  let MAX_RADIUS : f32 = 150.0;
+  if (length(pos) > MAX_RADIUS) {
+    // We're outside this radius, let's et 
+    let c = dot(pos, pos) - MAX_RADIUS * MAX_RADIUS;
+    let b = 2.0 * dot(ray, pos);
+    let a = dot(ray, ray);
+    if (b * b < 4.0 * a * c) {
+      return vec4(0.0, 0.0, 0.0, 0.0);
+    }
+    // // Solve ax^2 + bx + c = 0
+    let t1 = (-b - sqrt(b * b - 4.0 * a * c)) / (2.0 * a);
+    // let t2 = (-b + sqrt(b * b - 4 * a * c)) / (2 * a);
+    pos = pos + t1 * ray;
+  }
 
   let LIMIT = uniforms.surf_limit;
 
@@ -194,8 +211,10 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
   var last_pos = pos;
 
 
+
 #if CUT_HALF
   if (pos.y < 0.0) {
+    // Possibly need to render the flat "cut" face
     if (dpos.y < 0.0) {
       return vec4(0.0, 0.0, 0.0, 0.0);
     }
@@ -207,6 +226,8 @@ fn fs_main(vertex : VertexOutput)->@location(0) vec4<f32> {
     }
   }
 #endif
+
+
 
   for (var i : i32 = 0; i < EVAL_N; i++) {
 #if CUT_HALF

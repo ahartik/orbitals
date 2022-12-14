@@ -5,6 +5,7 @@ use bytemuck::{Pod, Zeroable};
 
 use wgpu::util::DeviceExt;
 use winit::{
+    dpi::PhysicalPosition,
     event::{
         DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent,
     },
@@ -175,14 +176,18 @@ impl CameraController {
         }
     }
 
+    fn pan(&mut self, dx: f64, dy: f64) {
+        self.phi -= 1.5 * Self::SENS_X * dx;
+        self.phi %= 2.0 * Self::PI;
+        self.theta -= 1.5 * Self::SENS_Y * dy;
+        self.theta = self.theta.clamp(0.0, Self::PI);
+    }
+
     fn process_mouse(&mut self, event: &DeviceEvent) -> bool {
         match event {
             DeviceEvent::MouseMotion { delta: (dx, dy) } => {
                 if self.is_mouse_pressed {
-                    self.phi -= 1.5 * Self::SENS_X * dx;
-                    self.phi %= 2.0 * Self::PI;
-                    self.theta -= 1.5 * Self::SENS_Y * dy;
-                    self.theta = self.theta.clamp(0.0, Self::PI);
+                    self.pan(*dx, *dy);
 
                     return true;
                 } else {
@@ -199,7 +204,7 @@ impl CameraController {
                 let y : f64 = match delta {
                     winit::event::MouseScrollDelta::LineDelta(_x, y) => *y as f64,
                     winit::event::MouseScrollDelta::PixelDelta(
-                        winit::dpi::PhysicalPosition{y, ..}) => -*y,
+                        PhysicalPosition{y, ..}) => -*y,
                 };
                 debug!("scroll {}", y);
                 if y > 0.0 {
@@ -300,11 +305,18 @@ impl OrbitalParams {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+struct TouchState {
+    last_id: u64,
+    last_location: PhysicalPosition<f64>
+}
+
 //
 struct AppState {
     camera: CameraController,
     aspect_ratio: f32,
-    params: OrbitalParams
+    params: OrbitalParams,
+    current_touch: Option<TouchState>
 }
 
 impl AppState {
@@ -312,7 +324,8 @@ impl AppState {
         Self {
             camera: CameraController::new(),
             aspect_ratio: 1.0,
-            params: OrbitalParams::new()
+            params: OrbitalParams::new(),
+            current_touch: None,
         }
     }
 
@@ -349,6 +362,51 @@ impl AppState {
     fn change_params(&mut self, params: &OrbitalParams) {
         self.params = *params;
         info!("params: {:?}", self.params);
+    }
+
+    fn process_touch(&mut self, touch: &winit::event::Touch) -> bool {
+        info!("Touch: {:?}", touch);
+        match touch.phase {
+            winit::event::TouchPhase::Started => {
+                // TODO: handle multi touch for zoom.
+                if self.current_touch.is_none() {
+                    self.current_touch = Some(TouchState {
+                        last_id: touch.id,
+                        last_location: touch.location,
+                    });
+                }
+                return false;
+            },
+            winit::event::TouchPhase::Cancelled |
+            winit::event::TouchPhase::Ended => {
+                if let Some(cur) = self.current_touch.clone() {
+                    if cur.last_id == touch.id {
+                        self.current_touch = None;
+                    }
+                }
+                return false;
+            },
+            winit::event::TouchPhase::Moved => {
+                if let Some(cur) = self.current_touch {
+                    if cur.last_id == touch.id {
+                        let dx : f64= 
+                            touch.location.x - 
+                            cur.last_location.x;
+                        let dy :f64 = 
+                            touch.location.y - 
+                            cur.last_location.y;
+                        const TOUCH_SENS: f64 = 1.0;
+                        self.camera.pan(TOUCH_SENS * dx, TOUCH_SENS * dy);
+                        self.current_touch = Some(TouchState {
+                            last_id: touch.id,
+                            last_location: touch.location,
+                        });
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
     }
 
     fn process_event(&mut self, event: &DeviceEvent) -> bool {
@@ -646,7 +704,14 @@ pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
                         window.request_redraw();
                     }
                 },
-                _ => {}
+                WindowEvent::Touch(touch) => {
+                    if app.process_touch(&touch) {
+                        window.request_redraw();
+                    }
+                },
+                _ => {
+                    // info!("Unhandled event: {:?}", e);
+                }
             },
             _ => {}
         }

@@ -89,32 +89,68 @@ init().then(() => {
       app.set_real(!val);
     });
 
+    // Show/hide controls
+    let showControls = true;
 
-    // Fix canvas:
+    let showButton = document.getElementById("show");
+    let hideButton = document.getElementById("hide");
+    let controlDiv = document.getElementById("inputs");
+    showButton.hidden = true;
+
+    showButton.addEventListener('click', (event) => {
+      showControls = true;
+      showButton.hidden = true;
+      hideButton.hidden = false;
+      controlDiv.hidden = false;
+    });
+    hideButton.addEventListener('click', (event) => {
+      showControls = false;
+      showButton.hidden = false;
+      hideButton.hidden = true;
+      controlDiv.hidden = true;
+    });
+
+    // Canvas size stuff
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
     let canvas = document.getElementById("wasm-canvas");
 
-    // XXX
-    let lowres = document.getElementById("lowres");
+    let scale = 1;
 
     function resizeCanvas() {
-      console.log("resize:");
       let w = window.innerWidth;
       let h = window.innerHeight;
       console.log(w);
       console.log(h);
-      if (lowres.checked) {
-        app.set_size(w/2, h/2);
-      } else {
-        app.set_size(w, h);
-      }
-      canvas.removeAttribute("style");
+      console.log(scale);
+
+      app.set_size(w/scale, h/scale);
     }
 
-    lowres.addEventListener('change', (event) => {
+    let scale1 = document.getElementById("scale1");
+    let scale2 = document.getElementById("scale2");
+    let scale3 = document.getElementById("scale3");
+    function changeScale(event) {
+      if (scale1.checked) {
+        scale = 1;
+      } else if (scale2.checked) {
+        scale = 2;
+      } else if (scale3.checked) {
+        scale = 3;
+      }
       resizeCanvas();
-    });
+    }
+    scale1.addEventListener('change', changeScale);
+    scale2.addEventListener('change', changeScale);
+    scale3.addEventListener('change', changeScale);
 
-    canvas.removeAttribute("style");
+    if (isMobile) {
+      scale3.checked = true;
+      scale = 3;
+    } else {
+      scale2.checked = true;
+      scale = 2;
+    }
+
     window.addEventListener('resize', resizeCanvas, false);
     // Draw canvas border for the first time.
     resizeCanvas();

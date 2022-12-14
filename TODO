@@ -1,11 +1,11 @@
 - Axis lines (X, Y, Z) with Bohr radius markers
 - Correct scaling for real orbitals
-- Analytical normals
-- Benchmark
-- Optimize MORE
+- Benchmark tool
+- Optimizations
+  - Analytical normals
   - Textures for r-func, theta-func and phi-func
-    -> Can avoid shader generation completely!
-    -x phi-func is hard to do for "real orbitals"
+    - phi-func is hard to do for "real orbitals"
+    - Could possibly avoid shader generation
   - Compute bounding sphere for the orbital based on R-function
     -> Compute ray intersection with this sphere and divide into N parts
     ->
@@ -16,7 +16,6 @@
     - Allows higher res raymarching for less visual glitches
     - Useful for future projects too.
     - Maybe get good enough mobile perf?
-- Mobile UI
 - Negative M
 - Complex coloring
   - Prettier gradient

@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use log::debug;
+use log::info;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ShaderParams {
@@ -174,7 +175,7 @@ impl ShaderBuilder {
         }
 
         writeln!(wave, "return (yfun * rfun);").unwrap();
-        debug!("{}", wave);
+        info!("{}", wave);
         // if m == 5 && l == 6 {
         //     println!("{}", wave);
         // }
@@ -222,18 +223,6 @@ impl Polynomial {
         return Self { coeffs };
     }
 
-    fn add(&self, o: &Polynomial) -> Self {
-        let mut coeffs = vec![];
-        coeffs.resize(self.coeffs.len().max(o.coeffs.len()), 0.0);
-        for i in 0..self.coeffs.len() {
-            coeffs[i] += self.coeffs[i];
-        }
-        for i in 0..o.coeffs.len() {
-            coeffs[i] += o.coeffs[i];
-        }
-        return Self { coeffs };
-    }
-
     fn sub(&self, o: &Polynomial) -> Self {
         let mut coeffs = vec![];
         coeffs.resize(self.coeffs.len().max(o.coeffs.len()), 0.0);
@@ -261,6 +250,18 @@ impl Polynomial {
             self.coeffs.push(0.0);
         }
     }
+
+    /*
+    fn eval(&mut self, x: f64) -> f64 {
+        let mut y : f64 = 0.0;
+        let mut xp : f64 = 1.0;
+        for i in 0..self.coeffs.len() {
+            y += self.coeffs[i] * xp;
+            xp *= x;
+        }
+        return y;
+    }
+    */
 }
 
 fn gen_legendre(maxn: usize) -> Vec<Polynomial> {
