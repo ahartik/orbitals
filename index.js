@@ -15,10 +15,6 @@ init().then(() => {
     ql.value = app.get_l()
     qm.value = app.get_m()
 
-    console.log(app.get_n());
-    console.log(app.get_l());
-    console.log(app.get_m());
-
     // Logarithmic / exponential 
     let surf_min = 0.0001;
     let surf_default = 0.25;
@@ -119,9 +115,6 @@ init().then(() => {
     function resizeCanvas() {
       let w = window.innerWidth;
       let h = window.innerHeight;
-      console.log(w);
-      console.log(h);
-      console.log(scale);
 
       app.set_size(w/scale, h/scale);
     }
