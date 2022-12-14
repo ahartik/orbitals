@@ -12,12 +12,14 @@ crate-type = ["cdylib", "rlib"]
 winit = "0.27.5"
 wgpu-types = "0.14"
 wgpu = "0.14"
-env_logger = "0.9"
 log = "0.4"
-pollster = "0.2"
 bytemuck = { version = "1.12.1", features = ["derive"] }
 nalgebra = "0.31.2"
 minipre = "0.2.0"
+
+[target.'cfg(unix)'.dependencies]
+pollster = "0.2"
+env_logger = "0.9"
 
 [target.'cfg(target_arch="wasm32")'.dependencies]
 wasm-bindgen = "0.2"
@@ -31,16 +33,12 @@ version = "0.3.60"
 features = [
   'Document',
   'Element',
-  'HtmlElement',
-  'HtmlInputElement',
   'Node',
   'Window',
-  'Location',
-  'Event'
 ]
 
 [profile.release]
 lto = true
 codegen-units = 1
-strip = true
-opt-level = "s"
+# strip = true
+opt-level = "z"

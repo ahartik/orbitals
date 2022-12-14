@@ -1,5 +1,7 @@
 use std::fmt::Write;
 
+use log::debug;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ShaderParams {
     pub n: i32,
@@ -172,39 +174,13 @@ impl ShaderBuilder {
         }
 
         writeln!(wave, "return (yfun * rfun);").unwrap();
-        println!("{}", wave);
+        debug!("{}", wave);
         // if m == 5 && l == 6 {
         //     println!("{}", wave);
         // }
 
         ctx.define("WAVE_FUNC", wave);
         return minipre::process_str(TEMPLATE, &mut ctx).unwrap();
-    }
-
-    pub fn all_params(&self) -> Vec<ShaderParams> {
-        let mut res = vec![];
-        for n in 1i32..((self.max_n + 1) as i32) {
-            for l in 0i32..n {
-                // for m in (-l)..(l + 1) {
-                for m in 0..(l + 1) {
-                    res.push(ShaderParams {
-                        n,
-                        l,
-                        m,
-                        cut_half: false,
-                        real_orbital: true,
-                    });
-                    res.push(ShaderParams {
-                        n,
-                        l,
-                        m,
-                        cut_half: true,
-                        real_orbital: true,
-                    });
-                }
-            }
-        }
-        return res;
     }
 }
 
@@ -326,15 +302,11 @@ fn gen_laguerre(maxn: usize) -> Vec<Polynomial> {
     let mut b = Polynomial::from_coeffs(vec![1.0]);
     for n in 0..(maxn + 1) {
         let mut z = b.clone();
-        //println!("z: {:?}", z);
         for _ in 0..n {
             let mut w = z.clone();
             w.diff_inplace();
-            //println!("w: {:?}", w);
             z = w.sub(&z);
-            //println!("z: {:?}", z);
         }
-        //println!("z2: {:?}", z);
         z.scale_inplace(1.0 / factorial(n));
         res.push(z);
         // b = x**(n+1) for next iter

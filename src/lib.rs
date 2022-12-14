@@ -6,14 +6,15 @@ use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 use winit::{
     event::{
-        DeviceEvent, ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent,
+        DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent,
     },
-    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
+    event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
 
 use log::{
-    info
+    info,
+    debug
 };
 
 extern crate nalgebra as na;
@@ -175,11 +176,9 @@ impl CameraController {
     }
 
     fn process_mouse(&mut self, event: &DeviceEvent) -> bool {
-        // println!("DeviceEvent: {:?}", event);
         match event {
             DeviceEvent::MouseMotion { delta: (dx, dy) } => {
                 if self.is_mouse_pressed {
-                    // println!("move {}, {}", dx, dy);
                     self.phi -= 1.5 * Self::SENS_X * dx;
                     self.phi %= 2.0 * Self::PI;
                     self.theta -= 1.5 * Self::SENS_Y * dy;
@@ -202,7 +201,7 @@ impl CameraController {
                     winit::event::MouseScrollDelta::PixelDelta(
                         winit::dpi::PhysicalPosition{y, ..}) => -*y,
                 };
-                info!("scroll {}", y);
+                debug!("scroll {}", y);
                 if y > 0.0 {
                     self.r *= 1.125;
                 } else {
@@ -241,9 +240,9 @@ impl CameraController {
         );
 
         let mut look_x = Vec3f::new(-self.phi.sin() as f32, self.phi.cos() as f32, 0.0);
-        // println!("look_x: {}", look_x);
-        // println!("look_y: {}", look_y);
-        // println!("look_z: {}", look_z);
+        debug!("look_x: {}", look_x);
+        debug!("look_y: {}", look_y);
+        debug!("look_z: {}", look_z);
 
         // Correct for FOV and aspect ratio
         let fov = (75.0 / 180.0) * std::f32::consts::PI;
@@ -280,6 +279,9 @@ impl OrbitalParams {
         }
     }
     fn sanitize(&mut self) {
+        if self.n < 1 {
+            self.n = 1;
+        }
         if self.n > MAX_N as i32 {
             self.n = 1;
         }
@@ -398,7 +400,7 @@ impl AppState {
         }
         if changed {
             self.params.sanitize();
-            info!("params: {:?}", self.params);
+            info!("{:?}", self.params);
             return true;
         }
         return false;
@@ -406,12 +408,15 @@ impl AppState {
 
 }
 
+// Web controls are implemented using custom events that contain new settings
+// for the orbital. EventLoop is handy for this.
 #[derive(Copy, Clone, Debug)]
 pub enum WebUIEvent {
     ChangeParams(OrbitalParams),
     ChangeSize(i32, i32)
 }
 
+// Main rendering function.
 pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
     let size = window.inner_size();
     let instance = wgpu::Instance::new(wgpu::Backends::all());
@@ -434,7 +439,7 @@ pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
                 features: wgpu::Features::empty(),
                 // WebGL doesn't support all of wgpu's features, so if
                 // we're building for the web we'll have to disable some.
-                limits: wgpu::Limits::downlevel_webgl2_defaults(), //
+                limits: wgpu::Limits::downlevel_webgl2_defaults(),
             },
             None,
         )
@@ -606,7 +611,6 @@ pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
                 frame.present();
             }
             Event::RedrawEventsCleared => {
-                // XXX: Not needed for regular rendering
                 // window.request_redraw();
             }
             Event::WindowEvent {
@@ -626,7 +630,7 @@ pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
                 } => *control_flow = ControlFlow::Exit,
                 #[cfg(target_arch = "wasm32")]
                 WindowEvent::MouseInput {
-                    button: MouseButton::Left,
+                    button: winit::event::MouseButton::Left,
                     state,
                     ..
                 } => {
@@ -651,6 +655,3 @@ pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
 
 #[cfg(target_arch = "wasm32")]
 mod web;
-#[cfg(target_arch = "wasm32")]
-pub use web::web_main;
-

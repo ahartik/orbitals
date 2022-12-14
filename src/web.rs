@@ -1,4 +1,3 @@
-
 use super::{
     WebUIEvent,
     OrbitalParams,
@@ -9,7 +8,6 @@ use winit::event_loop::{
     EventLoopBuilder,
 };
 use log::info;
-// use web_sys::JsCast;
 
 use wasm_bindgen::prelude::*;
 
@@ -90,7 +88,6 @@ pub fn web_main() {
 
 #[wasm_bindgen]
 pub fn web_start_app() -> WebApp {
-    info!("web_start_app");
     let event_loop = EventLoopBuilder::<WebUIEvent>::with_user_event().build();
     let window = winit::window::Window::new(&event_loop).unwrap();
     window.set_inner_size(winit::dpi::PhysicalSize::new(400, 400));
