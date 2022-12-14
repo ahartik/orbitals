@@ -1,5 +1,7 @@
 # 3D Hydrogen orbital visualization
 
+Run in your browser [HERE](https://ahartik.github.io/orbitals).
+
 Renders hydrogen orbital wavefunctions by raymarching.
 Surface is drawn at $|\psi|^2=L$ for given "surface limit" L.
 Surface color depends the argument of the wavefunction $\arg(\psi)$.
