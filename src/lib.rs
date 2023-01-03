@@ -165,8 +165,8 @@ impl CameraController {
     fn new() -> Self {
         Self {
             is_mouse_pressed: false,
-            r: 45.0,
-            theta: Self::PI / 2.0,
+            r: 70.0,
+            theta: 0.7 * Self::PI / 2.0,
             phi: (3.0 * Self::PI / 2.0),
         }
     }
@@ -270,9 +270,10 @@ impl OrbitalParams {
             l: 2,
             m: 1,
             // Matches 0.25/nm^3 from Griffiths page 153
-            surf_limit: 0.25,
+            // surf_limit: 0.25,
+            surf_limit: 0.10,
             enable_cuts: false,
-            real_orbital: true,
+            real_orbital: false,
         }
     }
     fn sanitize(&mut self) {
