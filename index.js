@@ -1,6 +1,6 @@
 import {default as init, web_start_app} from "./pkg/orbitals.js";
 init().then(() => {
-    console.log("WASM Loaded");
+    console.log("WASM Loadedz");
     let app = web_start_app();
     console.log(app);
 
@@ -34,6 +34,7 @@ init().then(() => {
       // B * x = log(s / min)
       // x = log(s/min) / B
       surf_range.value = (Math.log(s/ surf_min) / surf_B) * surf_range_default;
+      console.log("sanitize()");
     }
 
     qn.addEventListener('change', (event) => {
@@ -61,6 +62,7 @@ init().then(() => {
       sanitize();
     });
 
+
     let cut = document.getElementById("cut");
     cut.checked = app.get_cut();
     cut.addEventListener('change', (event) => {
@@ -68,6 +70,8 @@ init().then(() => {
       app.set_cut(val);
       sanitize();
     });
+
+    sanitize();
 
     let complex = document.getElementById("complex");
     let real = document.getElementById("real");

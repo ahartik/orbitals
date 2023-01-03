@@ -165,7 +165,7 @@ impl CameraController {
     fn new() -> Self {
         Self {
             is_mouse_pressed: false,
-            r: 70.0,
+            r: 90.0,
             theta: 0.7 * Self::PI / 2.0,
             phi: (3.0 * Self::PI / 2.0),
         }
