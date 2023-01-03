@@ -1,6 +1,5 @@
 use std::fmt::Write;
 
-use log::debug;
 use log::info;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -184,9 +183,6 @@ impl ShaderBuilder {
 
         writeln!(wave, "return (yfun * rfun);").unwrap();
         info!("{}", wave);
-        // if m == 5 && l == 6 {
-        //     println!("{}", wave);
-        // }
 
         ctx.define("WAVE_FUNC", wave);
         return minipre::process_str(TEMPLATE, &mut ctx).unwrap();

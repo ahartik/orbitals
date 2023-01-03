@@ -351,7 +351,6 @@ impl AppState {
     }
 
     fn process_touch(&mut self, touch: &winit::event::Touch) -> bool {
-        info!("Touch: {:?}", touch);
         match touch.phase {
             winit::event::TouchPhase::Started => {
                 // TODO: handle multi touch for zoom.
@@ -700,9 +699,7 @@ pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
                         window.request_redraw();
                     }
                 }
-                _ => {
-                    // info!("Unhandled event: {:?}", e);
-                }
+                _ => { }
             },
             _ => {}
         }
