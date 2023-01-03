@@ -1,5 +1,7 @@
 # 3D Hydrogen orbital visualization
 
+Run in your browser [HERE](https://ahartik.github.io/orbitals).
+
 Renders hydrogen orbital wavefunctions by raymarching.
 Surface is drawn at $|\psi|^2=L$ for given "surface limit" L.
 Surface color depends the argument of the wavefunction $\arg(\psi)$.
@@ -11,10 +13,10 @@ Features:
 * Visualizes $\psi$ as a "cloud" when $|\psi|^2 < L$.
 * Option to reduce rendering resolution to work on low-performance machines ("Render scale")
 * Pan using mouse or touch (mobile).
-* Zoom using scroll wheel.
+* Zoom using scroll wheel (desktop) or multitouch (mobile).
 
 Missing features / known bugs:
 * Optimize more to achieve smooth experience on mobile without resolution scaling.
-* Would be nice to visualize axis directions and some markers to show orbital size in units of Bohr radii.
 * Real orbitals are "too small" (don't integrate up to 1)
-* Zoom on mobile devices (multitouch).
+* Would be nice to visualize axis directions and some markers to show orbital size in units of Bohr radii.
+* Some latex thing to show what the wavefunction is would be nice.

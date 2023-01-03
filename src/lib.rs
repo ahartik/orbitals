@@ -6,17 +6,12 @@ use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 use winit::{
     dpi::PhysicalPosition,
-    event::{
-        DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent,
-    },
+    event::{DeviceEvent, ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
 
-use log::{
-    info,
-    debug
-};
+use log::{debug, error, info};
 
 extern crate nalgebra as na;
 
@@ -198,13 +193,10 @@ impl CameraController {
                 self.is_mouse_pressed = *state == winit::event::ElementState::Pressed;
                 return false;
             }
-            DeviceEvent::MouseWheel {
-                delta
-            } => {
-                let y : f64 = match delta {
+            DeviceEvent::MouseWheel { delta } => {
+                let y: f64 = match delta {
                     winit::event::MouseScrollDelta::LineDelta(_x, y) => *y as f64,
-                    winit::event::MouseScrollDelta::PixelDelta(
-                        PhysicalPosition{y, ..}) => -*y,
+                    winit::event::MouseScrollDelta::PixelDelta(PhysicalPosition { y, .. }) => -*y,
                 };
                 debug!("scroll {}", y);
                 if y > 0.0 {
@@ -300,15 +292,9 @@ impl OrbitalParams {
     fn surf_limit_bohr(&self) -> f64 {
         // Input is in probability per nanometer, convert to units
         // where bohr radius is 1.
-        let conv = 3.7e-05/0.25;
+        let conv = 3.7e-05 / 0.25;
         return conv * self.surf_limit;
     }
-}
-
-#[derive(Copy, Clone, Debug)]
-struct TouchState {
-    last_id: u64,
-    last_location: PhysicalPosition<f64>
 }
 
 //
@@ -316,7 +302,7 @@ struct AppState {
     camera: CameraController,
     aspect_ratio: f32,
     params: OrbitalParams,
-    current_touch: Option<TouchState>
+    touches: HashMap<u64, PhysicalPosition<f64>>,
 }
 
 impl AppState {
@@ -325,7 +311,7 @@ impl AppState {
             camera: CameraController::new(),
             aspect_ratio: 1.0,
             params: OrbitalParams::new(),
-            current_touch: None,
+            touches: HashMap::new(),
         }
     }
 
@@ -365,45 +351,49 @@ impl AppState {
     }
 
     fn process_touch(&mut self, touch: &winit::event::Touch) -> bool {
-        info!("Touch: {:?}", touch);
         match touch.phase {
             winit::event::TouchPhase::Started => {
                 // TODO: handle multi touch for zoom.
-                if self.current_touch.is_none() {
-                    self.current_touch = Some(TouchState {
-                        last_id: touch.id,
-                        last_location: touch.location,
-                    });
-                }
+                self.touches.insert(touch.id, touch.location);
                 return false;
-            },
-            winit::event::TouchPhase::Cancelled |
-            winit::event::TouchPhase::Ended => {
-                if let Some(cur) = self.current_touch.clone() {
-                    if cur.last_id == touch.id {
-                        self.current_touch = None;
-                    }
-                }
+            }
+            winit::event::TouchPhase::Cancelled | winit::event::TouchPhase::Ended => {
+                self.touches.remove(&touch.id);
                 return false;
-            },
+            }
             winit::event::TouchPhase::Moved => {
-                if let Some(cur) = self.current_touch {
-                    if cur.last_id == touch.id {
-                        let dx : f64= 
-                            touch.location.x - 
-                            cur.last_location.x;
-                        let dy :f64 = 
-                            touch.location.y - 
-                            cur.last_location.y;
+                if let Some(old_loc) = self.touches.insert(touch.id, touch.location) {
+                    if self.touches.len() == 1 {
+                        let dx: f64 = touch.location.x - old_loc.x;
+                        let dy: f64 = touch.location.y - old_loc.y;
                         const TOUCH_SENS: f64 = 1.0;
                         self.camera.pan(TOUCH_SENS * dx, TOUCH_SENS * dy);
-                        self.current_touch = Some(TouchState {
-                            last_id: touch.id,
-                            last_location: touch.location,
-                        });
+                        return true;
+                        // Pan
+                    } else if self.touches.len() == 2 {
+                        // Zoom
+                        let mut other_loc = PhysicalPosition::new(0.0, 0.0);
+                        for (id, loc) in self.touches.iter() {
+                            if *id != touch.id {
+                                other_loc = *loc;
+                            }
+                        }
+                        let old_dist = f64::sqrt(
+                            (other_loc.x - old_loc.x).powi(2) + (other_loc.y - old_loc.y).powi(2),
+                        );
+                        let new_dist = f64::sqrt(
+                            (other_loc.x - touch.location.x).powi(2)
+                                + (other_loc.y - touch.location.y).powi(2),
+                        );
+                        let zoom = new_dist / old_dist;
+
+                        self.camera.r /= zoom;
                         return true;
                     }
+                } else {
+                    error!("Touch moved but wasn't present in touches map");
                 }
+
                 return false;
             }
         }
@@ -463,7 +453,6 @@ impl AppState {
         }
         return false;
     }
-
 }
 
 // Web controls are implemented using custom events that contain new settings
@@ -471,7 +460,7 @@ impl AppState {
 #[derive(Copy, Clone, Debug)]
 pub enum WebUIEvent {
     ChangeParams(OrbitalParams),
-    ChangeSize(i32, i32)
+    ChangeSize(i32, i32),
 }
 
 // Main rendering function.
@@ -521,7 +510,6 @@ pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
     });
 
     // RENDER TO TEXTURE
-    
 
     let swapchain_format = surface.get_supported_formats(&adapter)[0];
     let mut pipelines = HashMap::<ShaderParams, wgpu::RenderPipeline>::new();
@@ -613,18 +601,15 @@ pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
             }
             Event::UserEvent(ev) => {
                 match ev {
-                    WebUIEvent::ChangeParams(params)
-                        => {
+                    WebUIEvent::ChangeParams(params) => {
                         app.change_params(&params);
-                    },
-                    WebUIEvent::ChangeSize(w,h)
-                        => {
+                    }
+                    WebUIEvent::ChangeSize(w, h) => {
                         window.set_inner_size(winit::dpi::LogicalSize::new(w, h));
-
-                    },
+                    }
                 }
                 window.request_redraw();
-            },
+            }
             Event::RedrawRequested(_) => {
                 let frame = surface
                     .get_current_texture()
@@ -692,26 +677,29 @@ pub async fn run(event_loop: EventLoop<WebUIEvent>, window: Window) {
                     state,
                     ..
                 } => {
-                    let fake_event = DeviceEvent::Button { button: 1u32, state: state.clone() };
+                    let fake_event = DeviceEvent::Button {
+                        button: 1u32,
+                        state: state.clone(),
+                    };
                     if app.process_event(&fake_event) {
                         window.request_redraw();
                     }
-                },
+                }
                 #[cfg(target_arch = "wasm32")]
                 WindowEvent::MouseWheel { delta, .. } => {
-                    let fake_event = DeviceEvent::MouseWheel{delta: delta.clone()};
+                    let fake_event = DeviceEvent::MouseWheel {
+                        delta: delta.clone(),
+                    };
                     if app.process_event(&fake_event) {
                         window.request_redraw();
                     }
-                },
+                }
                 WindowEvent::Touch(touch) => {
                     if app.process_touch(&touch) {
                         window.request_redraw();
                     }
-                },
-                _ => {
-                    // info!("Unhandled event: {:?}", e);
                 }
+                _ => { }
             },
             _ => {}
         }
