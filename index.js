@@ -34,7 +34,6 @@ init().then(() => {
       // B * x = log(s / min)
       // x = log(s/min) / B
       surf_range.value = (Math.log(s/ surf_min) / surf_B) * surf_range_default;
-      console.log("sanitize()");
     }
 
     qn.addEventListener('change', (event) => {
