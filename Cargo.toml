@@ -6,11 +6,13 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+
 # winit = "0.27.5"
-winit = { git="https://github.com/ryo33/winit.git", branch="web-touch-event" }
+# Specific up-to-date version of winit is required for touch events. This can
+# be changed once 0.27.6 is released.
+# winit = { git="https://github.com/ryo33/winit.git", branch="web-touch-event" }
+winit = { git="https://github.com/rust-windowing/winit.git", rev="2f52c23fa9d87b609bd278b1afbea05d6bdd4aac" }
 wgpu-types = "0.14"
 wgpu = "0.14"
 log = "0.4"
