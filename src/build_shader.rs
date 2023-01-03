@@ -61,7 +61,7 @@ impl ShaderBuilder {
         ctx.define("VAL_L", format!("{:.1}", l));
         ctx.define("VAL_M", format!("{:.1}", m));
         ctx.define("CUT_HALF", if params.cut_half { "1" } else { "0" });
-        ctx.define("PHI_SYMMETRIC", if params.real_orbital {"0"} else {"1"});
+        ctx.define("PHI_SYMMETRIC", if params.real_orbital { "0" } else { "1" });
 
         let mut wave = String::new();
         // rfun
@@ -86,7 +86,7 @@ impl ShaderBuilder {
             let nvecs = (ncoeffs + 3) / 4;
             writeln!(wave, "let rpows0 = vec4(1.0, r, r * r, r * r * r);").unwrap();
             for i in 1..nvecs {
-                writeln!(wave, "let rpows{} = r *rpows{}.w * rpows0;", i, i-1).unwrap();
+                writeln!(wave, "let rpows{} = r *rpows{}.w * rpows0;", i, i - 1).unwrap();
             }
             writeln!(wave, "var rfun : f32 = 0.0;").unwrap();
             for i in 0..nvecs {
@@ -101,8 +101,15 @@ impl ShaderBuilder {
                     wave,
                     "let rcoeff{} = vec4({:.8e}, {:.8e}, {:.8e}, {:.8e});",
                     i, coeffs[0], coeffs[1], coeffs[2], coeffs[3]
-                ).unwrap();
-                writeln!(wave, "rfun += dot(rpows0, pow(r, {:.1})* rcoeff{});", (4*i) as f64, i).unwrap();
+                )
+                .unwrap();
+                writeln!(
+                    wave,
+                    "rfun += dot(rpows0, pow(r, {:.1})* rcoeff{});",
+                    (4 * i) as f64,
+                    i
+                )
+                .unwrap();
             }
         }
         writeln!(wave, "rfun *= exp(-r / {:.1});", n as f64).unwrap();
@@ -131,7 +138,8 @@ impl ShaderBuilder {
                 writeln!(
                     wave,
                     "let cospows{} = costheta * cospows{}.w * cospows0;",
-                    i, i-1
+                    i,
+                    i - 1
                 )
                 .unwrap();
             }
@@ -160,14 +168,14 @@ impl ShaderBuilder {
                 writeln!(wave, "let z0 = phiz;").unwrap();
                 let mut i = 1usize;
                 while (1 << i) <= m {
-                    writeln!(wave, "let z{} = complex_mul(z{}, z{});", i, i-1, i-1).unwrap();
+                    writeln!(wave, "let z{} = complex_mul(z{}, z{});", i, i - 1, i - 1).unwrap();
                     i += 1;
                 }
 
                 writeln!(wave, "var zf = vec2(1.0, 0.0);").unwrap();
                 for j in 0..i {
                     if ((1 << j) & m) != 0 {
-                        writeln!(wave, "zf = complex_mul(zf, z{});",j ).unwrap();
+                        writeln!(wave, "zf = complex_mul(zf, z{});", j).unwrap();
                     }
                 }
                 writeln!(wave, "yfun *= zf.x;").unwrap();
